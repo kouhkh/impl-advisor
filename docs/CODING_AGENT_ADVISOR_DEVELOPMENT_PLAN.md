@@ -39,14 +39,14 @@
 
 目标：不要求 Planora 修改仓库，就能让顾问对代码和固定运行材料进行提问。
 
-1. 修正 `readonly-advisor` 默认配置位置，确保配置和会话不落入目标仓库；
-2. 在仓库外建立 Advisor Workspace；
-3. 编写薄 Runner，接收 PinAsk 页面事实并调用现有 CLI/DSH；
-4. 使用 Planora 实际运行材料验证固定导出目录读取；
-5. 提供通用代码工具：列目录、读文件、受限搜索、Git 版本读取；
-6. 按需生成少量 Context Notes，不要求首问前准备完整地图；
-7. 保存证据、会话、版本和缺失材料；
-8. 追问沿用同一会话上下文，并能处理多候选运行。
+1. `[已完成]` 修正 `readonly-advisor` 默认配置位置；配置/会话默认 `~/.impl-advisor/<project>/`，禁止写入目标仓库；
+2. `[已完成]` 普通追问（answer）提示词注入会话历史；`followup` / `propose` 均带 transcript；
+3. 在仓库外建立 Advisor Workspace（notes / evidence 目录约定）；
+4. 编写薄 Runner，接收 PinAsk 页面事实并调用现有 CLI/DSH；
+5. 使用 Planora 实际运行材料验证固定导出目录读取；
+6. 提供通用代码工具：列目录、读文件、受限搜索、Git 版本读取；
+7. 按需生成少量 Context Notes，不要求首问前准备完整地图；
+8. 保存证据、会话、版本和缺失材料；多候选运行时追问澄清。
 
 出口：项目仓库没有新增顾问文件；同一问题能给出证据或明确缺证。
 
@@ -82,7 +82,7 @@
 
 ## 5. 下一步代码任务
 
-1. 修正 `readonly-advisor` 的外部配置路径和普通追问历史传递；
+1. `[已完成]` 外部配置路径 + 普通追问历史（见 `readonly-advisor/cli.js` 与 `npm test`）；
 2. 增加页面事实和 `runtime.mode=export-dir` 的配置支持；
 3. 编写薄 Runner：接收 PinAsk batch，调用 CLI/DSH，回传回答和证据；
 4. 使用 Planora 实际运行材料完成端到端冒烟；

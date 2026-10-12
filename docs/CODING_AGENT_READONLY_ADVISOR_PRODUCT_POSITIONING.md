@@ -4,7 +4,7 @@
 > 首个试点：Planora「技术规格书语气改写」
 > 当前实现基础：DSH headless，只读工作区，Flash 默认、Pro 按需复核
 
-当前最小可用封装见 [`readonly-advisor/README.md`](</Users/ltc/WindowsProject/wps-addin-poc/readonly-advisor/README.md>)：初始化项目配置、记录专家会话、继续追问，并生成待研发确认的修改建议。
+当前最小可用封装见 [`readonly-advisor/README.md`](../readonly-advisor/README.md)：初始化项目配置、记录专家会话、继续追问，并生成待研发确认的修改建议。
 
 ## 1. 当前定位
 

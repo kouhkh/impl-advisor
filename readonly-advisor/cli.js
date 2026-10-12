@@ -11,7 +11,7 @@ const SCHEMA_VERSION = 'readonly-advisor-session/1';
 const CONFIG_SCHEMA_VERSION = 'readonly-advisor-project/1';
 
 function usage(exitCode = 0) {
-  const text = `\nReadonly Advisor (DSH)\n\nCommands:\n  init      create a minimal project config\n  ask       ask a read-only business/task question and record the session\n  followup  continue a recorded session\n  propose   create a developer-reviewable modification proposal\n  review    record a developer decision on a proposal\n\nExamples:\n  node readonly-advisor/cli.js init \\\n    --project planora --task "技术规格书语气改写" \\\n    --workspace /path/to/planora --output /path/to/planora.advisor.json\n\n  node readonly-advisor/cli.js ask --config /path/to/planora.advisor.json \\\n    --question "为什么这句话被改写？请定位证据。"\n\n  node readonly-advisor/cli.js propose --session /path/to/session\n`;
+  const text = `\nReadonly Advisor (DSH)\n\nCommands:\n  init      create a minimal project config\n  ask       ask a read-only business/task question and record the session\n  followup  continue a recorded session\n  propose   create a developer-reviewable modification proposal\n  review    record a developer decision on a proposal\n\nExamples:\n  node readonly-advisor/cli.js init \\\n    --project planora --task "技术规格书语气改写" \\\n    --workspace /path/to/planora\n\n  # default config/sessions live under ~/.impl-advisor/<project>/\n  node readonly-advisor/cli.js ask --config ~/.impl-advisor/planora/project.json \\\n    --question "为什么这句话被改写？请定位证据。"\n\n  node readonly-advisor/cli.js propose --session /path/to/session\n`;
   process.stdout.write(text);
   process.exit(exitCode);
 }
@@ -96,8 +96,16 @@ function collectWorkspaceFacts(workspace) {
   };
 }
 
+function defaultAdvisorHome(project) {
+  return path.join(os.homedir(), '.impl-advisor', project || 'project');
+}
+
 function defaultRecordDir(project) {
-  return path.join(os.homedir(), '.dsh-advisor', project, 'sessions');
+  return path.join(defaultAdvisorHome(project), 'sessions');
+}
+
+function defaultConfigPath(project) {
+  return path.join(defaultAdvisorHome(project), 'project.json');
 }
 
 function defaultDshBin() {
@@ -121,6 +129,12 @@ function loadConfig(file) {
   config.__configPath = configPath;
   config.workspace = resolveWorkspace(config);
   config.recordDir = path.resolve(config.recordDir || defaultRecordDir(config.project || 'project'));
+  if (config.recordDir === config.workspace || config.recordDir.startsWith(`${config.workspace}${path.sep}`)) {
+    throw new Error(`recordDir must stay outside target workspace: ${config.recordDir}`);
+  }
+  if (configPath === config.workspace || configPath.startsWith(`${config.workspace}${path.sep}`)) {
+    throw new Error(`advisor config must stay outside target workspace: ${configPath}`);
+  }
   config.dshBin = normalizeExecutable(config.dshBin);
   config.dshHome = config.dshHome || process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
   return config;
@@ -154,10 +168,11 @@ function buildPrompt({ config, question, mode, transcript }) {
   const retrieval = formatRetrieval(config);
   const task = config.task || '未指定业务任务';
   const base = `你是项目的只读 coding agent 顾问。\n\n项目：${config.project || '未命名项目'}\n目标任务：${task}\n工作区：${config.workspace}\n${paths ? `重要路径：\n${paths}\n` : ''}${taskContext ? `业务任务资料（优先读取）：\n${taskContext}\n` : ''}${terms ? `项目术语：\n${terms}\n` : ''}${retrieval ? `${retrieval}\n` : ''}\n硬性要求：\n1. 只读检查，不修改文件、不提交、不部署、不写业务数据。\n2. 只把实际读取到的内容当作事实；把代码推测和缺失材料分开。\n3. 回答中列出实际读取的文件路径、关键符号或命令。\n4. 不要输出凭据、环境变量值、密钥或隐私数据。\n5. 如果无法还原某次实际运行，要明确说明缺少什么。\n\n专家问题：\n${question}\n`;
+  const history = transcript ? `\n已有专家会话记录：\n${transcript}\n` : '';
   if (mode === 'proposal') {
-    return `${base}\n请在只读基础上生成一份“待研发确认的修改建议”，不要直接改代码。必须包含：\n- 问题复述；\n- 直接证据及路径；\n- 可能涉及的规则、配置、workflow、Agent、工具或代码对象；\n- 建议修改范围和不应修改的范围；\n- 验证、回放或评测方式；\n- 风险、未知项和需要研发确认的问题。\n如果证据不足，不要猜测具体实现。\n${transcript ? `\n已有专家会话记录：\n${transcript}\n` : ''}`;
+    return `${base}\n请在只读基础上生成一份“待研发确认的修改建议”，不要直接改代码。必须包含：\n- 问题复述；\n- 直接证据及路径；\n- 可能涉及的规则、配置、workflow、Agent、工具或代码对象；\n- 建议修改范围和不应修改的范围；\n- 验证、回放或评测方式；\n- 风险、未知项和需要研发确认的问题。\n如果证据不足，不要猜测具体实现。\n${history}`;
   }
-  return `${base}\n回答结构建议：\n1. 结论；\n2. 证据路径和关键符号；\n3. 直接事实 / 代码推测 / 缺失材料；\n4. 专家下一步可以确认的问题。\n`;
+  return `${base}\n回答结构建议：\n1. 结论；\n2. 证据路径和关键符号；\n3. 直接事实 / 代码推测 / 缺失材料；\n4. 专家下一步可以确认的问题。\n${history}`;
 }
 
 function runDsh(config, prompt) {
@@ -234,14 +249,22 @@ function updateSession(sessionDir, patch) {
 function commandInit(args) {
   const project = required(args, 'project');
   const workspace = path.resolve(required(args, 'workspace'));
-  const output = path.resolve(args.output || path.join(workspace, '.dsh-advisor.project.json'));
+  // Keep advisor config outside the target project by default.
+  const output = path.resolve(args.output || defaultConfigPath(project));
+  if (output === workspace || output.startsWith(`${workspace}${path.sep}`)) {
+    throw new Error(`refusing to write advisor config inside target workspace: ${output} (use --output under ~/.impl-advisor or another external path)`);
+  }
+  const recordDir = path.resolve(args.recordDir || defaultRecordDir(project));
+  if (recordDir === workspace || recordDir.startsWith(`${workspace}${path.sep}`)) {
+    throw new Error(`refusing to store sessions inside target workspace: ${recordDir}`);
+  }
   const config = {
     schemaVersion: CONFIG_SCHEMA_VERSION,
     project,
     task: args.task || '',
     workspace,
     readOnly: true,
-    recordDir: args.recordDir || defaultRecordDir(project),
+    recordDir,
     dshBin: args['dsh-bin'] || defaultDshBin(),
     dshHome: args['dsh-home'] || process.env.DSH_HOME || path.join(os.homedir(), '.dsh'),
     importantPaths: {},

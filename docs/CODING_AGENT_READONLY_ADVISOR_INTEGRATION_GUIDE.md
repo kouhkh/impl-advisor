@@ -46,9 +46,9 @@ node /path/to/deepseek-harness/apps/cli/lib/bin.js \
   "<专家问题>"
 ```
 
-DSH 的权限配置必须是只读。凭据由运行环境提供，不能写进问题、报告或项目仓库。当前本机验证过的目标项目是 `wps-addin-poc` 和 Planora；线上项目、SSH 和远程日志尚未验证。
+DSH 的权限配置必须是只读。凭据由运行环境提供，不能写进问题、报告或项目仓库。当前本机验证过的目标项目是 Planora（及历史实验仓库）；线上项目、SSH 和远程日志尚未验证。
 
-Planora 的专项结果见 [`DSH_PLANORA_READONLY_EXPERIMENT_20261010.md`](</Users/ltc/WindowsProject/wps-addin-poc/docs/DSH_PLANORA_READONLY_EXPERIMENT_20261010.md>)。当前接入仍以静态代码和已落盘产物为主，尚未接入具体线上 `AiJob` 或 `ReviewSession`。
+Planora 相关实验笔记仍保留在原 PoC 文档树；本仓库以 CLI 与正式设计文档为准。当前接入仍以静态代码和已落盘产物为主，尚未接入具体线上 `AiJob` 或 `ReviewSession`。
 
 ### 3.1 面向项目方的最小封装
 

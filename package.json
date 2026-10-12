@@ -1,0 +1,14 @@
+{
+  "name": "impl-advisor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "面向业务专家的实现核查顾问：只读代码与运行材料，沉淀证据与待研发确认建议",
+  "scripts": {
+    "test": "node readonly-advisor/cli-test.js",
+    "test:readonly-advisor": "node readonly-advisor/cli-test.js",
+    "advisor": "node readonly-advisor/cli.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

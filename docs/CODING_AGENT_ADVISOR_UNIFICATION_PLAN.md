@@ -12,8 +12,8 @@
 | F2 | 原稿新增了外部上下文生成；Cursor 更强调薄 Runner、项目侧默认部署和压缩 MVP | [原稿架构](/Users/ltc/WindowsProject/wps-addin-poc/docs/CODING_AGENT_ADVISOR_SERVICE_ARCHITECTURE.md:44)、[副本架构](/Users/ltc/WindowsProject/wps-addin-poc/docs/CODING_AGENT_ADVISOR_SERVICE_ARCHITECTURE.cursor.md:9) |
 | F3 | 当前 PinAsk 保存 DOM、页面信息、坐标等，截图明确为 `not-captured`；有 `onSave(batch)` 接入点 | [页面信息](/Users/ltc/CursorProject/中交机电局项目/pinask/overlay/pinask.js:338)、[保存回调](/Users/ltc/CursorProject/中交机电局项目/pinask/overlay/pinask.js:456) |
 | F4 | 代码实际支持的配置版本是 `readonly-advisor-project/1`，不是两套详设中的 `runtime-advisor-project/1` 或 `/2` | [配置版本](/Users/ltc/WindowsProject/wps-addin-poc/readonly-advisor/cli.js:11)、[配置校验](/Users/ltc/WindowsProject/wps-addin-poc/readonly-advisor/cli.js:114) |
-| F5 | `init` 默认在目标工作区写配置；会话默认已在仓库外保存，但目前没有阻止用户把记录目录指回目标仓库 | [初始化](/Users/ltc/WindowsProject/wps-addin-poc/readonly-advisor/cli.js:234)、[会话目录](/Users/ltc/WindowsProject/wps-addin-poc/readonly-advisor/cli.js:99) |
-| F6 | 普通追问读取了历史记录，但 `buildPrompt` 仅在 proposal 分支使用它，answer 分支遗漏历史 | [提示词](/Users/ltc/WindowsProject/wps-addin-poc/readonly-advisor/cli.js:146)、[追问](/Users/ltc/WindowsProject/wps-addin-poc/readonly-advisor/cli.js:265) |
+| F5 | `init` 曾默认在目标工作区写配置 | **已修**（本仓）：默认 `~/.impl-advisor/<project>/`，拒绝配置/会话落在目标仓库内 |
+| F6 | 普通追问读取了历史，但 answer 分支未注入 transcript | **已修**（本仓）：answer / proposal 均注入会话历史 |
 | F7 | CLI 检查 `readOnly: true` 并发送只读提示词；实际调用继承环境并使用 DSH headless profile。仅凭此封装不能确认底层已强制只读，也不能确认实际模型一定是 Flash | [加载配置](/Users/ltc/WindowsProject/wps-addin-poc/readonly-advisor/cli.js:114)、[DSH 调用](/Users/ltc/WindowsProject/wps-addin-poc/readonly-advisor/cli.js:163)、[模型策略记录](/Users/ltc/WindowsProject/wps-addin-poc/readonly-advisor/cli.js:204) |
 | F8 | Cursor 详设把薄 HTTP 放到 P2，但概要和开发计划把 PinAsk 接通列为 MVP；原稿的对比实验同时改变地图和运行材料，无法单独归因地图收益 | [副本详设](/Users/ltc/WindowsProject/wps-addin-poc/docs/CODING_AGENT_RUNTIME_ADVISOR_DETAILED_DESIGN.cursor.md:113)、[副本计划](/Users/ltc/WindowsProject/wps-addin-poc/docs/CODING_AGENT_ADVISOR_DEVELOPMENT_PLAN.cursor.md:36)、[原稿实验](/Users/ltc/WindowsProject/wps-addin-poc/docs/CODING_AGENT_CODEBASE_MEMORY_LANDING.md:82) |
 
