@@ -14,7 +14,8 @@ docs/               # 概要、详设、架构、开发计划
 
 相关能力：
 
-- 页面入口复用独立仓库 [PinAsk](https://github.com/kouhkh/pinask)
+- 页面入口复用独立仓库 [PinAsk](https://github.com/kouhkh/pinask)（**不内嵌**；可给其他库用）
+- 本仓对接的 PinAsk 版本见 [`deps/pinask.json`](deps/pinask.json)；升级 PinAsk 后改那里的 `compatible.commit`
 - Agent 运行时使用本机 DSH headless（需自行安装/配置）
 
 ## 快速开始
@@ -54,6 +55,6 @@ npm test
 
 ## 当前边界（P0）
 
-已做：CLI 会话闭环；默认外部工作区；追问历史；`export-dir`；页面事实；薄 Runner。
+已做：CLI 会话闭环；外部工作区；追问历史；`export-dir`；页面事实；薄 Runner；Planora DSH 冒烟；PinAsk 答案展示（在 PinAsk 仓，版本钉在 `deps/pinask.json`）。
 
-计划中：Planora 真实导出冒烟、Context Notes 按需生成、PinAsk 答案展示。详见开发计划。
+计划中：按需 Context Notes。详见开发计划。

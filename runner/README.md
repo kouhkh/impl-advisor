@@ -26,9 +26,9 @@ node runner/server.js --config ~/.impl-advisor/planora/project.json --dry-run
 | POST | `/api/pinask` | 接收 PinAsk batch，新建或追问会话 |
 | POST | `/ask` | `{ question, session?, page_context? }` |
 
-PinAsk 侧把 `endpoint` 指到 `http://127.0.0.1:8787/api/pinask`。返回 JSON 含 `id` / `session` / `answer`；当前 PinAsk overlay 主要展示保存成功提示，完整答案展示可后续接到同一响应。
+PinAsk 是独立仓库，不随本仓发布。对接版本钉在 [`deps/pinask.json`](../deps/pinask.json)。
 
-追问时在 batch 或 `/ask` 中附带上次返回的 `session` 路径。
+PinAsk overlay 把 `endpoint` 指到 `http://127.0.0.1:8787/api/pinask`。返回 JSON 含 `id` / `session` / `answer`；兼容的 PinAsk 版本会在侧栏展示 `answer`，并用 `session` 追问。
 
 ## 边界
 

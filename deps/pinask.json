@@ -1,0 +1,19 @@
+{
+  "name": "pinask",
+  "repository": "https://github.com/kouhkh/pinask",
+  "relationship": "separate-repo",
+  "purpose": "Page connector overlay; not vendored into impl-advisor",
+  "compatible": {
+    "ref": "main",
+    "commit": "e693ae3a7d018d365cc651118377cf18a7c7528f",
+    "short": "e693ae3",
+    "date": "2026-10-12",
+    "notes": "Overlay shows Runner answer; follow-up sends session; scene.url/href present"
+  },
+  "integration": {
+    "endpoint": "POST /api/pinask",
+    "runner": "runner/server.js",
+    "expectedResponseFields": ["ok", "id", "session", "answer", "turns"]
+  },
+  "updatePolicy": "Bump compatible.commit when verifying a new PinAsk revision against this Runner; do not copy PinAsk source into this repo."
+}

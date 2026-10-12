@@ -19,7 +19,7 @@
 
 | 组件/模块 | 状态 |
 |---|---|
-| Page Connector / PinAsk | `[已实现]`，`/Users/ltc/CursorProject/中交机电局项目/pinask`；页面端到端连接计划中 |
+| Page Connector / PinAsk | `[独立仓]` [kouhkh/pinask](https://github.com/kouhkh/pinask)；本仓只钉版本 [`deps/pinask.json`](../deps/pinask.json)，不内嵌源码 |
 | Advisor Runner | `[已实现]` `runner/server.js`：本机 HTTP，接 PinAsk/`/ask`；DSH 仍走 CLI 封装 |
 | Code Access | `[MVP]` 本地目录、Git 或 SSH 只读 |
 | Runtime Access | `[已实现]` `runtime.mode=export-dir`；SSH/只读命令在 P1 验证 |
@@ -87,7 +87,7 @@
 3. `[已完成]` 薄 Runner（PinAsk batch / `/ask`）；
 4. `[已完成]` Planora 真实 export-dir + DSH 冒烟（配置在本机 `~/.impl-advisor/planora/`，不入库）；
 5. 按需写入 Context Notes 与人工确认，不写入 Planora；
-6. `[进行中/PinAsk 仓]` overlay 展示 Runner 返回的 `answer`，并用返回的 `session` 做追问（改 `kouhkh/pinask`，非本仓内嵌）。
+6. `[已完成/PinAsk 仓]` overlay 展示 `answer` + `session` 追问；本仓用 `deps/pinask.json` 记录兼容 commit。
 
 P0 不做：新前端、注册中心、OpenAPI、向量库、结构索引大框架、自动 Pro 路由。
 

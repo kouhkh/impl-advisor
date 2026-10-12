@@ -9,6 +9,11 @@
     "advisor": "node readonly-advisor/cli.js",
     "runner": "node runner/server.js"
   },
+  "implAdvisor": {
+    "externalDeps": {
+      "pinask": "deps/pinask.json"
+    }
+  },
   "engines": {
     "node": ">=18"
   }
