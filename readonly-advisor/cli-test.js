@@ -92,14 +92,17 @@ assert.match(result.stdout, /页面事实/);
 assert.match(result.stdout, /https:\/\/example\.test\/job\/1/);
 assert.match(result.stdout, /版本绑定/);
 assert.match(result.stdout, /不得用代码 HEAD 冒充部署版本/);
+assert.match(result.stdout, /运行候选搜索/);
 assert.match(result.stdout, new RegExp(workspace.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 const sessionDir = result.stdout.split('\n')[0];
 assert.ok(fs.existsSync(path.join(sessionDir, 'session.json')));
 assert.ok(fs.existsSync(path.join(sessionDir, 'page-context.json')));
 assert.ok(fs.existsSync(path.join(sessionDir, 'versions.json')));
+assert.ok(fs.existsSync(path.join(sessionDir, 'runtime-candidates.json')));
 const sessionMeta = JSON.parse(fs.readFileSync(path.join(sessionDir, 'session.json'), 'utf8'));
 assert.ok(sessionMeta.versions);
 assert.ok(sessionMeta.versions.comparison);
+assert.ok(sessionMeta.runtimeSearch);
 assert.ok(sessionDir.startsWith(records));
 
 result = spawnSync(process.execPath, [cli, 'followup', '--session', sessionDir, '--question', '还有什么？', '--dry-run'], { encoding: 'utf8' });

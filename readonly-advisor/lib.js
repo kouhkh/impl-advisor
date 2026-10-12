@@ -346,8 +346,9 @@ function refreshContextNotes(config, { dryRun = false } = {}) {
   return { dryRun: false, files: written, raw, filled };
 }
 
-function buildPrompt({ config, question, mode, transcript, pageContext, versions }) {
+function buildPrompt({ config, question, mode, transcript, pageContext, versions, runtimeSearch }) {
   const { formatVersionBinding } = require('./version-binding');
+  const { formatRuntimeSearch } = require('./runtime-search');
   const paths = config.importantPaths && Object.entries(config.importantPaths)
     .map(([name, value]) => `- ${name}: ${value}`).join('\n');
   const terms = config.terms && Object.entries(config.terms)
@@ -359,15 +360,16 @@ function buildPrompt({ config, question, mode, transcript, pageContext, versions
   const runtime = formatRuntime(config);
   const contextNotes = formatContextNotes(config);
   const versionBlock = formatVersionBinding(versions);
+  const runtimeBlock = formatRuntimeSearch(runtimeSearch);
   const page = formatPageContext(pageContext);
   const task = config.task || '未指定业务任务';
   const envLine = config.environment ? `环境：${config.environment}\n` : '';
-  const base = `你是项目的只读 coding agent 顾问。\n\n项目：${config.project || '未命名项目'}\n${envLine}目标任务：${task}\n工作区：${config.workspace}\n${paths ? `重要路径：\n${paths}\n` : ''}${taskContext ? `业务任务资料（优先读取）：\n${taskContext}\n` : ''}${terms ? `项目术语：\n${terms}\n` : ''}${retrieval ? `${retrieval}\n` : ''}${runtime}${versionBlock ? `\n${versionBlock}\n` : ''}${contextNotes ? `\n${contextNotes}\n` : ''}${page ? `\n${page}\n` : ''}\n硬性要求：\n1. 只读检查，不修改文件、不提交、不部署、不写业务数据。\n2. 只把实际读取到的内容当作事实；把代码推测和缺失材料分开。\n3. 回答中列出实际读取的文件路径、关键符号或命令。\n4. 不要输出凭据、环境变量值、密钥或隐私数据。\n5. 如果无法还原某次实际运行，要明确说明缺少什么。\n6. 必须区分代码工作区版本与部署/运行版本；不一致或未知时不得用代码 HEAD 冒充部署。\n\n专家问题：\n${question}\n`;
+  const base = `你是项目的只读 coding agent 顾问。\n\n项目：${config.project || '未命名项目'}\n${envLine}目标任务：${task}\n工作区：${config.workspace}\n${paths ? `重要路径：\n${paths}\n` : ''}${taskContext ? `业务任务资料（优先读取）：\n${taskContext}\n` : ''}${terms ? `项目术语：\n${terms}\n` : ''}${retrieval ? `${retrieval}\n` : ''}${runtime}${versionBlock ? `\n${versionBlock}\n` : ''}${runtimeBlock ? `\n${runtimeBlock}\n` : ''}${contextNotes ? `\n${contextNotes}\n` : ''}${page ? `\n${page}\n` : ''}\n硬性要求：\n1. 只读检查，不修改文件、不提交、不部署、不写业务数据。\n2. 只把实际读取到的内容当作事实；把代码推测和缺失材料分开。\n3. 回答中列出实际读取的文件路径、关键符号或命令。\n4. 不要输出凭据、环境变量值、密钥或隐私数据。\n5. 如果无法还原某次实际运行，要明确说明缺少什么。\n6. 必须区分代码工作区版本与部署/运行版本；不一致或未知时不得用代码 HEAD 冒充部署。\n7. 多个运行候选时必须先追问确认，不得把不同运行材料拼成一次事实。\n\n专家问题：\n${question}\n`;
   const history = transcript ? `\n已有专家会话记录：\n${transcript}\n` : '';
   if (mode === 'proposal') {
     return `${base}\n请在只读基础上生成一份“待研发确认的修改建议”，不要直接改代码。必须包含：\n- 问题复述；\n- 直接证据及路径；\n- 可能涉及的规则、配置、workflow、Agent、工具或代码对象；\n- 建议修改范围和不应修改的范围；\n- 验证、回放或评测方式；\n- 风险、未知项和需要研发确认的问题。\n如果证据不足，不要猜测具体实现。\n${history}`;
   }
-  return `${base}\n回答结构建议：\n1. 结论；\n2. 版本说明（代码 commit vs 部署 current/release，含 matched/mismatched/unknown）；\n3. 证据路径和关键符号；\n4. 直接事实 / 代码推测 / 缺失材料；\n5. 专家下一步可以确认的问题。\n${history}`;
+  return `${base}\n回答结构建议：\n1. 结论；\n2. 版本说明（代码 commit vs 部署 current/release，含 matched/mismatched/unknown）；\n3. 运行候选（唯一 / 多个待确认 / 缺失）；\n4. 证据路径和关键符号；\n5. 直接事实 / 代码推测 / 缺失材料；\n6. 专家下一步可以确认的问题。\n${history}`;
 }
 
 function runDsh(config, prompt) {
@@ -396,7 +398,7 @@ function appendTranscript(file, role, text) {
   fs.appendFileSync(file, `\n## ${heading} · ${new Date().toISOString()}\n\n${text.trim()}\n`, 'utf8');
 }
 
-function createSession(config, question, answer, pageContext, versions) {
+function createSession(config, question, answer, pageContext, versions, runtimeSearch) {
   const sessionId = nowId('advisor');
   const sessionDir = path.join(config.recordDir, sessionId);
   ensureDir(sessionDir);
@@ -419,6 +421,7 @@ function createSession(config, question, answer, pageContext, versions) {
     workspace: config.workspace,
     git: facts,
     versions: versions || null,
+    runtimeSearch: runtimeSearch || null,
     runtime: config.runtime || { mode: 'none' },
     pageContext: pageContext || null,
     readOnly: true,
@@ -431,6 +434,7 @@ function createSession(config, question, answer, pageContext, versions) {
   };
   writeJson(path.join(sessionDir, 'session.json'), metadata);
   if (versions) writeJson(path.join(sessionDir, 'versions.json'), versions);
+  if (runtimeSearch) writeJson(path.join(sessionDir, 'runtime-candidates.json'), runtimeSearch);
   fs.writeFileSync(path.join(sessionDir, 'question.md'), `${question.trim()}\n`, 'utf8');
   fs.writeFileSync(path.join(sessionDir, 'answer.md'), `${answer.trim()}\n`, 'utf8');
   if (pageContext) writeJson(path.join(sessionDir, 'page-context.json'), pageContext);
@@ -438,10 +442,13 @@ function createSession(config, question, answer, pageContext, versions) {
     ? (versions.deploy.releaseSha || versions.deploy.currentBasename || versions.deploy.status || 'unknown')
     : 'n/a';
   const cmp = versions && versions.comparison ? versions.comparison.status : 'n/a';
-  fs.writeFileSync(path.join(sessionDir, 'transcript.md'), `# 顾问会话 ${sessionId}\n\n- 项目：${metadata.project || ''}\n- 任务：${metadata.task || ''}\n- 代码提交：${facts.commit || 'unknown'}\n- 部署引用：${deployLine}\n- 版本比较：${cmp}\n- 只读：是\n`, 'utf8');
+  const runStatus = runtimeSearch && (runtimeSearch.classification
+    ? runtimeSearch.classification.status
+    : runtimeSearch.status);
+  fs.writeFileSync(path.join(sessionDir, 'transcript.md'), `# 顾问会话 ${sessionId}\n\n- 项目：${metadata.project || ''}\n- 任务：${metadata.task || ''}\n- 代码提交：${facts.commit || 'unknown'}\n- 部署引用：${deployLine}\n- 版本比较：${cmp}\n- 运行候选：${runStatus || 'n/a'}\n- 只读：是\n`, 'utf8');
   appendTranscript(path.join(sessionDir, 'transcript.md'), 'expert', question);
   appendTranscript(path.join(sessionDir, 'transcript.md'), 'agent', answer);
-  return { sessionDir, metadata, answer, versions };
+  return { sessionDir, metadata, answer, versions, runtimeSearch };
 }
 
 function loadSession(sessionArg) {
@@ -498,17 +505,132 @@ function captureVersions(config, { includeDeploySnapshot = true } = {}) {
   });
 }
 
+function captureAskContext(config, {
+  question,
+  pageContext = null,
+  includeDeploySnapshot = true,
+  includeRuntimeCandidates = true,
+  dryRun = false,
+} = {}) {
+  const {
+    shouldSearchRuntime,
+    searchRunCandidates,
+    parseRunCandidatesSection,
+    classifyCandidates,
+    normalizeCandidateRoots,
+  } = require('./runtime-search');
+  const {
+    parseDeploySnapshotStdout,
+    compareVersions,
+  } = require('./version-binding');
+  const { runSshOp, defaultAuditPath } = require('./ssh-readonly');
+
+  const auditPath = defaultAuditPath(config.project);
+  const wantDeploy = Boolean(includeDeploySnapshot) && !dryRun;
+  const wantCandidates = Boolean(includeRuntimeCandidates)
+    && !dryRun
+    && shouldSearchRuntime(question, pageContext);
+
+  if (config.runtime && config.runtime.mode === 'ssh' && wantDeploy && wantCandidates) {
+    try {
+      const result = runSshOp(config.runtime, {
+        op: 'ask-preflight',
+        args: { roots: normalizeCandidateRoots(config.runtime) },
+        auditPath,
+      });
+      const code = collectWorkspaceFacts(config.workspace);
+      const parsedDeploy = parseDeploySnapshotStdout(result.stdout);
+      const deploy = {
+        status: parsedDeploy.currentExists ? 'observed' : 'missing_current',
+        mode: 'ssh',
+        host: config.runtime.host,
+        root: config.runtime.root,
+        ...parsedDeploy,
+        ms: result.ms,
+      };
+      const versions = {
+        capturedAt: new Date().toISOString(),
+        code: {
+          root: code.root,
+          branch: code.branch,
+          commit: code.commit,
+          fullCommit: code.fullCommit,
+          dirty: code.dirty,
+        },
+        deploy,
+        comparison: compareVersions({
+          commit: code.commit,
+          fullCommit: code.fullCommit,
+        }, deploy),
+      };
+      const candidates = parseRunCandidatesSection(result.stdout);
+      const runtimeSearch = {
+        status: 'observed',
+        mode: 'ssh',
+        host: config.runtime.host,
+        root: config.runtime.root,
+        roots: normalizeCandidateRoots(config.runtime),
+        candidates,
+        classification: classifyCandidates(candidates),
+        ms: result.ms,
+        load1: result.beforeHealth && result.beforeHealth.load1,
+        capturedAt: new Date().toISOString(),
+        sourceOp: 'ask-preflight',
+      };
+      return { versions, runtimeSearch };
+    } catch (error) {
+      return {
+        versions: captureVersions(config, { includeDeploySnapshot: false }),
+        runtimeSearch: {
+          status: 'error',
+          mode: 'ssh',
+          error: error.message,
+          detail: error.message,
+          candidates: [],
+        },
+      };
+    }
+  }
+
+  const versions = captureVersions(config, { includeDeploySnapshot: wantDeploy });
+  if (!wantCandidates) {
+    return {
+      versions,
+      runtimeSearch: {
+        status: config.runtime && config.runtime.mode === 'ssh' ? 'skipped' : 'not_applicable',
+        mode: (config.runtime && config.runtime.mode) || 'none',
+        detail: dryRun
+          ? 'dry-run does not hit remote runtime search'
+          : 'question/page context did not look runtime-related; skipped extra SSH',
+        candidates: [],
+      },
+    };
+  }
+  const runtimeSearch = searchRunCandidates(config, {
+    runSshOpFn: runSshOp,
+    auditPath,
+    question,
+    pageContext,
+    force: true,
+  });
+  return { versions, runtimeSearch };
+}
+
 function askQuestion(config, {
   question,
   pageContext = null,
   dryRun = false,
   includeDeploySnapshot = true,
+  includeRuntimeCandidates = true,
 } = {}) {
   if (!question || !String(question).trim()) throw new Error('missing question');
   const runtimeConfig = { ...config, dryRun: Boolean(dryRun) };
-  // Real ask + ssh: one guarded deploy-snapshot. dry-run never hits remote.
-  const versions = captureVersions(runtimeConfig, {
-    includeDeploySnapshot: Boolean(includeDeploySnapshot) && !dryRun,
+  const { versions, runtimeSearch } = captureAskContext(runtimeConfig, {
+    question,
+    pageContext,
+    includeDeploySnapshot,
+    includeRuntimeCandidates,
+    dryRun,
   });
   const answer = runDsh(runtimeConfig, buildPrompt({
     config: runtimeConfig,
@@ -516,8 +638,9 @@ function askQuestion(config, {
     mode: 'answer',
     pageContext,
     versions,
+    runtimeSearch,
   }));
-  return createSession(runtimeConfig, question, answer, pageContext, versions);
+  return createSession(runtimeConfig, question, answer, pageContext, versions, runtimeSearch);
 }
 
 function followupQuestion(sessionDirOrMeta, {
@@ -525,6 +648,7 @@ function followupQuestion(sessionDirOrMeta, {
   pageContext = null,
   dryRun = false,
   includeDeploySnapshot = false,
+  includeRuntimeCandidates = true,
 } = {}) {
   const { sessionDir, metadata } = typeof sessionDirOrMeta === 'string'
     ? loadSession(sessionDirOrMeta)
@@ -534,9 +658,23 @@ function followupQuestion(sessionDirOrMeta, {
   config.dryRun = Boolean(dryRun);
   const transcript = fs.readFileSync(path.join(sessionDir, 'transcript.md'), 'utf8');
   let versions = metadata.versions || null;
-  if (includeDeploySnapshot && !dryRun) {
-    versions = captureVersions(config, { includeDeploySnapshot: true });
-    writeJson(path.join(sessionDir, 'versions.json'), versions);
+  let runtimeSearch = metadata.runtimeSearch || null;
+  if (!dryRun && (includeDeploySnapshot || includeRuntimeCandidates)) {
+    const ctx = captureAskContext(config, {
+      question,
+      pageContext: pageContext || metadata.pageContext || null,
+      includeDeploySnapshot,
+      includeRuntimeCandidates,
+      dryRun: false,
+    });
+    if (includeDeploySnapshot) {
+      versions = ctx.versions;
+      writeJson(path.join(sessionDir, 'versions.json'), versions);
+    }
+    if (ctx.runtimeSearch && ctx.runtimeSearch.status === 'observed') {
+      runtimeSearch = ctx.runtimeSearch;
+      writeJson(path.join(sessionDir, 'runtime-candidates.json'), runtimeSearch);
+    }
   }
   const answer = runDsh(config, buildPrompt({
     config,
@@ -545,6 +683,7 @@ function followupQuestion(sessionDirOrMeta, {
     transcript,
     pageContext: pageContext || metadata.pageContext || null,
     versions,
+    runtimeSearch,
   }));
   const turn = metadata.turns + 1;
   fs.writeFileSync(path.join(sessionDir, `turn-${String(turn).padStart(3, '0')}-question.md`), `${question.trim()}\n`, 'utf8');
@@ -556,8 +695,15 @@ function followupQuestion(sessionDirOrMeta, {
     turns: turn,
     updatedAt: new Date().toISOString(),
     ...(versions ? { versions } : {}),
+    ...(runtimeSearch ? { runtimeSearch } : {}),
   });
-  return { sessionDir, metadata: { ...metadata, turns: turn, versions }, answer, versions };
+  return {
+    sessionDir,
+    metadata: { ...metadata, turns: turn, versions, runtimeSearch },
+    answer,
+    versions,
+    runtimeSearch,
+  };
 }
 
 function initProject({
@@ -640,6 +786,7 @@ module.exports = {
   followupQuestion,
   initProject,
   captureVersions,
+  captureAskContext,
   formatPageContext,
   formatRuntime,
   formatContextNotes,

@@ -16,13 +16,14 @@ const {
   refreshContextNotes,
   loadContextNotes,
   captureVersions,
+  captureAskContext,
   writeJson,
   appendTranscript,
 } = require('./lib');
 const { runSshOp, defaultAuditPath } = require('./ssh-readonly');
 
 function usage(exitCode = 0) {
-  const text = `\nReadonly Advisor (DSH)\n\nCommands:\n  init      create a minimal project config outside the target workspace\n  ask       ask a read-only business/task question and record the session\n  followup  continue a recorded session\n  notes     refresh or show external Context Notes\n  versions  capture code vs deploy version binding\n  ssh       guarded readonly SSH op (health|ls|head|find-names|deploy-snapshot)\n  propose   create a developer-reviewable modification proposal\n  review    record a developer decision on a proposal\n\nExamples:\n  node readonly-advisor/cli.js versions --config ~/.impl-advisor/planora/project.json\n  node readonly-advisor/cli.js ask --config ~/.impl-advisor/planora/project.json \\\n    --question "为什么这句话被改写？请定位证据。"\n  # ask 默认自动带部署快照；可用 --no-deploy-snapshot 关掉\n`;
+  const text = `\nReadonly Advisor (DSH)\n\nCommands:\n  init      create a minimal project config outside the target workspace\n  ask       ask a read-only business/task question and record the session\n  followup  continue a recorded session\n  notes     refresh or show external Context Notes\n  versions  capture code vs deploy version binding\n  runtime-search  list guarded runtime candidate files\n  ssh       guarded readonly SSH ops\n  propose   create a developer-reviewable modification proposal\n  review    record a developer decision on a proposal\n\nExamples:\n  node readonly-advisor/cli.js versions --config ~/.impl-advisor/planora/project.json\n  node readonly-advisor/cli.js runtime-search --config ~/.impl-advisor/planora/project.json --question "这次运行日志在哪"\n  node readonly-advisor/cli.js ask --config ~/.impl-advisor/planora/project.json \\\n    --question "这次改写对应哪份运行材料？"\n  # ask：部署快照默认开；运行相关问题会一次 SSH 拉候选。可用 --no-deploy-snapshot / --no-runtime-candidates\n`;
   process.stdout.write(text);
   process.exit(exitCode);
 }
@@ -41,7 +42,7 @@ function parseArgs(argv) {
       continue;
     }
     const key = token.slice(2);
-    if (key === 'help' || key === 'dry-run' || key === 'no-deploy-snapshot') {
+    if (key === 'help' || key === 'dry-run' || key === 'no-deploy-snapshot' || key === 'no-runtime-candidates') {
       out[key] = true;
       continue;
     }
@@ -103,6 +104,7 @@ function commandAsk(args) {
     pageContext,
     dryRun: Boolean(args['dry-run']),
     includeDeploySnapshot: !args['no-deploy-snapshot'],
+    includeRuntimeCandidates: !args['no-runtime-candidates'],
   });
   process.stdout.write(`${result.sessionDir}\n\n${result.answer}\n`);
 }
@@ -113,6 +115,34 @@ function commandVersions(args) {
     includeDeploySnapshot: !args['no-deploy-snapshot'],
   });
   process.stdout.write(`${JSON.stringify(versions, null, 2)}\n`);
+}
+
+function commandRuntimeSearch(args) {
+  const config = loadConfig(required(args, 'config'));
+  const question = args.question || '列出运行候选';
+  const pageContext = readPageContextArg(args);
+  const { runtimeSearch } = captureAskContext(config, {
+    question,
+    pageContext,
+    includeDeploySnapshot: false,
+    includeRuntimeCandidates: true,
+    dryRun: false,
+  });
+  // force path: captureAskContext only searches when heuristic matches; for explicit command, force via searchRunCandidates
+  if (runtimeSearch.status === 'skipped') {
+    const { searchRunCandidates } = require('./runtime-search');
+    const { runSshOp, defaultAuditPath } = require('./ssh-readonly');
+    const forced = searchRunCandidates(config, {
+      runSshOpFn: runSshOp,
+      auditPath: defaultAuditPath(config.project),
+      question,
+      pageContext,
+      force: true,
+    });
+    process.stdout.write(`${JSON.stringify(forced, null, 2)}\n`);
+    return;
+  }
+  process.stdout.write(`${JSON.stringify(runtimeSearch, null, 2)}\n`);
 }
 
 function commandFollowup(args) {
@@ -230,6 +260,7 @@ function main() {
     if (command === 'followup') return commandFollowup(args);
     if (command === 'notes') return commandNotes(args);
     if (command === 'versions') return commandVersions(args);
+    if (command === 'runtime-search') return commandRuntimeSearch(args);
     if (command === 'ssh') return commandSsh(args);
     if (command === 'propose') return commandPropose(args);
     if (command === 'review') return commandReview(args);
