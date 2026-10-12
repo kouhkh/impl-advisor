@@ -55,14 +55,14 @@ Planora 相关实验笔记仍保留在原 PoC 文档树；本仓库以 CLI 与�
 仓库中的 `readonly-advisor/cli.js` 对 DSH 做了一层薄封装。项目方只需要初始化一次配置，后续由专家直接提问：
 
 ```bash
+# 默认写入 ~/.impl-advisor/planora/，不写目标仓库
 node readonly-advisor/cli.js init \
   --project planora \
   --task "技术规格书语气改写" \
-  --workspace /path/to/planora \
-  --output /path/to/advisor-data/planora.advisor.json
+  --workspace /path/to/planora
 
 node readonly-advisor/cli.js ask \
-  --config /path/to/planora.advisor.json \
+  --config ~/.impl-advisor/planora/project.json \
   --question "为什么这句话被改写？请定位规则、路由或模型，并列出证据。"
 ```
 
