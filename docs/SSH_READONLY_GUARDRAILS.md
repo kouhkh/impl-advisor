@@ -6,7 +6,7 @@
 
 | 护栏 | 默认 | 作用 |
 |---|---|---|
-| 命令白名单 | `health` `ls` `head` `find-names` | 禁止自由 shell |
+| 命令白名单 | `health` `ls` `head` `find-names` `deploy-snapshot` | 禁止自由 shell |
 | 路径 jail | 必须在 `runtime.root` 下 | 防止读到无关系统路径 |
 | 单 host 并发 | 1 | 避免并行打爆 |
 | 最小间隔 | 800ms | 降低抖动与惊群 |

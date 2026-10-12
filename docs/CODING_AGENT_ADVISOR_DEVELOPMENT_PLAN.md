@@ -88,7 +88,7 @@
 4. `[已完成]` Planora 真实 export-dir + DSH 冒烟（配置在本机 `~/.impl-advisor/planora/`，不入库）；
 5. `[已完成]` Context Notes 刷新/注入（人工确认事实仍可后续加 `confirmed-facts`）；
 6. `[已完成/PinAsk 仓]` overlay 展示 `answer` + `session` 追问；本仓用 `deps/pinask.json` 记录兼容 commit。
-7. `[进行中/P1]` SSH 只读护栏已接通 123（`health/ls/head/find-names`）；下一步：版本绑定、日志候选搜索、与 ask 流程更紧的编排（仍禁止自由 shell / 自动重试轰炸）。
+7. `[进行中/P1]` SSH 护栏已通；版本绑定 + ask 自动部署快照已落地（`versions` / `deploy-snapshot`）；下一步才是日志候选搜索（仍禁止自由 shell / 自动重试轰炸）。
 
 P0 不做：新前端、注册中心、OpenAPI、向量库、结构索引大框架、自动 Pro 路由。
 

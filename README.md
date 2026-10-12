@@ -39,6 +39,10 @@ npm run runner -- --config ~/.impl-advisor/planora/project.json
 # 外部查询笔记（不写目标仓）
 node readonly-advisor/cli.js notes --config ~/.impl-advisor/planora/project.json --refresh
 
+# 代码 vs 部署版本绑定（ssh 时自动一次 deploy-snapshot）
+node readonly-advisor/cli.js versions --config ~/.impl-advisor/planora/project.json
+# ask 默认附带部署快照；可用 --no-deploy-snapshot 关闭
+
 # 页面夹具 E2E：另开 dry-run Runner 在 8790，再打开 http://127.0.0.1:8791/
 npm run runner -- --config ~/.impl-advisor/planora/project.json --port 8790 --dry-run
 npm run e2e:fixture

@@ -15,13 +15,14 @@ const {
   initProject,
   refreshContextNotes,
   loadContextNotes,
+  captureVersions,
   writeJson,
   appendTranscript,
 } = require('./lib');
 const { runSshOp, defaultAuditPath } = require('./ssh-readonly');
 
 function usage(exitCode = 0) {
-  const text = `\nReadonly Advisor (DSH)\n\nCommands:\n  init      create a minimal project config outside the target workspace\n  ask       ask a read-only business/task question and record the session\n  followup  continue a recorded session\n  notes     refresh or show external Context Notes\n  ssh       guarded readonly SSH op (health|ls|head|find-names)\n  propose   create a developer-reviewable modification proposal\n  review    record a developer decision on a proposal\n\nExamples:\n  node readonly-advisor/cli.js init \\\n    --project planora --task "技术规格书语气改写" \\\n    --workspace /path/to/planora \\\n    --runtime-mode ssh --ssh-host 123 --ssh-root /opt/planora\n\n  node readonly-advisor/cli.js ssh --config ~/.impl-advisor/planora/project.json --op health\n  node readonly-advisor/cli.js ssh --config ~/.impl-advisor/planora/project.json --op ls --path current\n\n  node readonly-advisor/cli.js notes --config ~/.impl-advisor/planora/project.json --refresh\n\n  node readonly-advisor/cli.js ask --config ~/.impl-advisor/planora/project.json \\\n    --question "为什么这句话被改写？请定位证据。"\n`;
+  const text = `\nReadonly Advisor (DSH)\n\nCommands:\n  init      create a minimal project config outside the target workspace\n  ask       ask a read-only business/task question and record the session\n  followup  continue a recorded session\n  notes     refresh or show external Context Notes\n  versions  capture code vs deploy version binding\n  ssh       guarded readonly SSH op (health|ls|head|find-names|deploy-snapshot)\n  propose   create a developer-reviewable modification proposal\n  review    record a developer decision on a proposal\n\nExamples:\n  node readonly-advisor/cli.js versions --config ~/.impl-advisor/planora/project.json\n  node readonly-advisor/cli.js ask --config ~/.impl-advisor/planora/project.json \\\n    --question "为什么这句话被改写？请定位证据。"\n  # ask 默认自动带部署快照；可用 --no-deploy-snapshot 关掉\n`;
   process.stdout.write(text);
   process.exit(exitCode);
 }
@@ -40,7 +41,7 @@ function parseArgs(argv) {
       continue;
     }
     const key = token.slice(2);
-    if (key === 'help' || key === 'dry-run') {
+    if (key === 'help' || key === 'dry-run' || key === 'no-deploy-snapshot') {
       out[key] = true;
       continue;
     }
@@ -101,8 +102,17 @@ function commandAsk(args) {
     question: required(args, 'question'),
     pageContext,
     dryRun: Boolean(args['dry-run']),
+    includeDeploySnapshot: !args['no-deploy-snapshot'],
   });
   process.stdout.write(`${result.sessionDir}\n\n${result.answer}\n`);
+}
+
+function commandVersions(args) {
+  const config = loadConfig(required(args, 'config'));
+  const versions = captureVersions(config, {
+    includeDeploySnapshot: !args['no-deploy-snapshot'],
+  });
+  process.stdout.write(`${JSON.stringify(versions, null, 2)}\n`);
 }
 
 function commandFollowup(args) {
@@ -126,6 +136,7 @@ function commandPropose(args) {
     mode: 'proposal',
     transcript,
     pageContext: metadata.pageContext || null,
+    versions: metadata.versions || null,
   }));
   const proposalPath = path.join(sessionDir, 'change-proposal.md');
   fs.writeFileSync(proposalPath, `# 待研发确认的修改建议\n\n- 会话：${metadata.sessionId}\n- 项目：${metadata.project || ''}\n- 任务：${metadata.task || ''}\n- 生成时间：${new Date().toISOString()}\n- 状态：pending_review\n\n${proposal.trim()}\n`, 'utf8');
@@ -218,6 +229,7 @@ function main() {
     if (command === 'ask') return commandAsk(args);
     if (command === 'followup') return commandFollowup(args);
     if (command === 'notes') return commandNotes(args);
+    if (command === 'versions') return commandVersions(args);
     if (command === 'ssh') return commandSsh(args);
     if (command === 'propose') return commandPropose(args);
     if (command === 'review') return commandReview(args);

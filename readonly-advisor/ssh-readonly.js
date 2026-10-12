@@ -213,7 +213,28 @@ function buildOpScript(op, runtime, args, limits) {
       `find -H "$target" -maxdepth ${depth} -type f -name ${shellQuote(pattern)} 2>/dev/null | head -n ${maxResults}`,
     ].join('\n');
   }
-  throw new Error(`unsupported ssh op: ${op} (allowed: health, ls, head, find-names)`);
+  if (op === 'deploy-snapshot') {
+    // Single SSH round-trip: health gate + current release pointers. No free shell.
+    const rootQ = shellQuote(root);
+    const ratio = Number(limits.maxLoadRatio);
+    const memRatio = Number(limits.maxMemUsedRatio);
+    return [
+      `cd ${rootQ} || { echo "cannot enter jail root" >&2; exit 2; }`,
+      'echo "hostname=$(hostname)"',
+      "echo \"load1=$(awk '{print $1}' /proc/loadavg)\"",
+      'echo "nproc=$(nproc)"',
+      "echo \"mem_used_mb=$(free -m | awk '/Mem:/{print $3}')\"",
+      "echo \"mem_total_mb=$(free -m | awk '/Mem:/{print $2}')\"",
+      `awk -v l="$(awk '{print $1}' /proc/loadavg)" -v n="$(nproc)" -v r="${ratio}" 'BEGIN{ if (n+0>0 && l+0 > n*r) { print "refusing: load too high" > "/dev/stderr"; exit 9 } }'`,
+      `awk -v u="$(free -m | awk '/Mem:/{print $3}')" -v t="$(free -m | awk '/Mem:/{print $2}')" -v r="${memRatio}" 'BEGIN{ if (t+0>0 && u/t > r) { print "refusing: memory too high" > "/dev/stderr"; exit 9 } }'`,
+      'if [ -e current ]; then echo "current_exists=yes"; else echo "current_exists=no"; fi',
+      'echo "current_target=$(readlink -f current 2>/dev/null || readlink current 2>/dev/null || true)"',
+      'echo "current_basename=$(basename "$(readlink -f current 2>/dev/null || echo)")"',
+      'if [ -e previous ]; then echo "previous_target=$(readlink -f previous 2>/dev/null || readlink previous 2>/dev/null || true)"; fi',
+      'if [ -f current/package.json ]; then echo "BEGIN_PACKAGE_JSON"; head -n 40 current/package.json; echo "END_PACKAGE_JSON"; fi',
+    ].join('\n');
+  }
+  throw new Error(`unsupported ssh op: ${op} (allowed: health, ls, head, find-names, deploy-snapshot)`);
 }
 
 function runSshOp(runtime, { op, args = {}, limits: limitsRaw, auditPath } = {}) {
@@ -225,13 +246,24 @@ function runSshOp(runtime, { op, args = {}, limits: limitsRaw, auditPath } = {})
 
   const limits = deepMergeLimits({ ...runtime.limits, ...limitsRaw });
   const started = new Date().toISOString();
-  const before = healthCheck(runtime, limits);
-  assertHostHealthy(before.health, limits);
 
   let result;
+  let beforeHealth;
   if (op === 'health') {
-    result = before;
+    result = healthCheck(runtime, limits);
+    beforeHealth = result.health;
+    assertHostHealthy(beforeHealth, limits);
+  } else if (op === 'deploy-snapshot') {
+    // One SSH call only — includes remote load/mem gate inside the script.
+    const script = buildOpScript(op, runtime, args, limits);
+    result = runRemote(runtime, script, limits, op);
+    beforeHealth = parseHealth(result.stdout);
+    assertHostHealthy(beforeHealth, limits);
+    result.health = beforeHealth;
   } else {
+    const before = healthCheck(runtime, limits);
+    beforeHealth = before.health;
+    assertHostHealthy(beforeHealth, limits);
     const script = buildOpScript(op, runtime, args, limits);
     result = runRemote(runtime, script, limits, op);
     const after = healthCheck(runtime, limits);
@@ -247,14 +279,14 @@ function runSshOp(runtime, { op, args = {}, limits: limitsRaw, auditPath } = {})
     args,
     ms: result.ms,
     ok: true,
-    load1Before: before.health.load1,
-    load1After: (result.afterHealth && result.afterHealth.load1) || before.health.load1,
+    load1Before: beforeHealth && beforeHealth.load1,
+    load1After: (result.afterHealth && result.afterHealth.load1) || (beforeHealth && beforeHealth.load1),
     outputBytes: Buffer.byteLength(result.stdout || '', 'utf8'),
   };
   appendAudit(auditPath, entry);
   return {
     ...result,
-    beforeHealth: before.health,
+    beforeHealth,
     audit: entry,
     limits,
   };
@@ -265,7 +297,7 @@ function formatSshOpsHelp(runtime) {
   return [
     `SSH 只读入口（受资源护栏约束）：${who}`,
     `jail root: ${runtime.root}`,
-    '允许操作：health | ls | head | find-names',
+    '允许操作：health | ls | head | find-names | deploy-snapshot',
     '本地调用：node readonly-advisor/cli.js ssh --config <cfg> --op <op> [--path rel] [--pattern "*.log"]',
     '护栏：单 host 串行、命令超时、输出截断、load/mem 过高拒绝、路径不得逃出 root、禁止自由 shell。',
   ].join('\n');

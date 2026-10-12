@@ -46,12 +46,14 @@ function git(workspace, args) {
 function collectWorkspaceFacts(workspace) {
   const root = git(workspace, ['rev-parse', '--show-toplevel']);
   const commit = git(workspace, ['rev-parse', '--short', 'HEAD']);
+  const fullCommit = git(workspace, ['rev-parse', 'HEAD']);
   const branch = git(workspace, ['branch', '--show-current']);
   const status = git(workspace, ['status', '--porcelain=v1']);
   return {
     root,
     branch: branch || null,
     commit: commit || null,
+    fullCommit: fullCommit || null,
     dirty: Boolean(status),
   };
 }
@@ -344,7 +346,8 @@ function refreshContextNotes(config, { dryRun = false } = {}) {
   return { dryRun: false, files: written, raw, filled };
 }
 
-function buildPrompt({ config, question, mode, transcript, pageContext }) {
+function buildPrompt({ config, question, mode, transcript, pageContext, versions }) {
+  const { formatVersionBinding } = require('./version-binding');
   const paths = config.importantPaths && Object.entries(config.importantPaths)
     .map(([name, value]) => `- ${name}: ${value}`).join('\n');
   const terms = config.terms && Object.entries(config.terms)
@@ -355,15 +358,16 @@ function buildPrompt({ config, question, mode, transcript, pageContext }) {
   const retrieval = formatRetrieval(config);
   const runtime = formatRuntime(config);
   const contextNotes = formatContextNotes(config);
+  const versionBlock = formatVersionBinding(versions);
   const page = formatPageContext(pageContext);
   const task = config.task || '未指定业务任务';
   const envLine = config.environment ? `环境：${config.environment}\n` : '';
-  const base = `你是项目的只读 coding agent 顾问。\n\n项目：${config.project || '未命名项目'}\n${envLine}目标任务：${task}\n工作区：${config.workspace}\n${paths ? `重要路径：\n${paths}\n` : ''}${taskContext ? `业务任务资料（优先读取）：\n${taskContext}\n` : ''}${terms ? `项目术语：\n${terms}\n` : ''}${retrieval ? `${retrieval}\n` : ''}${runtime}${contextNotes ? `\n${contextNotes}\n` : ''}${page ? `\n${page}\n` : ''}\n硬性要求：\n1. 只读检查，不修改文件、不提交、不部署、不写业务数据。\n2. 只把实际读取到的内容当作事实；把代码推测和缺失材料分开。\n3. 回答中列出实际读取的文件路径、关键符号或命令。\n4. 不要输出凭据、环境变量值、密钥或隐私数据。\n5. 如果无法还原某次实际运行，要明确说明缺少什么。\n\n专家问题：\n${question}\n`;
+  const base = `你是项目的只读 coding agent 顾问。\n\n项目：${config.project || '未命名项目'}\n${envLine}目标任务：${task}\n工作区：${config.workspace}\n${paths ? `重要路径：\n${paths}\n` : ''}${taskContext ? `业务任务资料（优先读取）：\n${taskContext}\n` : ''}${terms ? `项目术语：\n${terms}\n` : ''}${retrieval ? `${retrieval}\n` : ''}${runtime}${versionBlock ? `\n${versionBlock}\n` : ''}${contextNotes ? `\n${contextNotes}\n` : ''}${page ? `\n${page}\n` : ''}\n硬性要求：\n1. 只读检查，不修改文件、不提交、不部署、不写业务数据。\n2. 只把实际读取到的内容当作事实；把代码推测和缺失材料分开。\n3. 回答中列出实际读取的文件路径、关键符号或命令。\n4. 不要输出凭据、环境变量值、密钥或隐私数据。\n5. 如果无法还原某次实际运行，要明确说明缺少什么。\n6. 必须区分代码工作区版本与部署/运行版本；不一致或未知时不得用代码 HEAD 冒充部署。\n\n专家问题：\n${question}\n`;
   const history = transcript ? `\n已有专家会话记录：\n${transcript}\n` : '';
   if (mode === 'proposal') {
     return `${base}\n请在只读基础上生成一份“待研发确认的修改建议”，不要直接改代码。必须包含：\n- 问题复述；\n- 直接证据及路径；\n- 可能涉及的规则、配置、workflow、Agent、工具或代码对象；\n- 建议修改范围和不应修改的范围；\n- 验证、回放或评测方式；\n- 风险、未知项和需要研发确认的问题。\n如果证据不足，不要猜测具体实现。\n${history}`;
   }
-  return `${base}\n回答结构建议：\n1. 结论；\n2. 证据路径和关键符号；\n3. 直接事实 / 代码推测 / 缺失材料；\n4. 专家下一步可以确认的问题。\n${history}`;
+  return `${base}\n回答结构建议：\n1. 结论；\n2. 版本说明（代码 commit vs 部署 current/release，含 matched/mismatched/unknown）；\n3. 证据路径和关键符号；\n4. 直接事实 / 代码推测 / 缺失材料；\n5. 专家下一步可以确认的问题。\n${history}`;
 }
 
 function runDsh(config, prompt) {
@@ -392,12 +396,18 @@ function appendTranscript(file, role, text) {
   fs.appendFileSync(file, `\n## ${heading} · ${new Date().toISOString()}\n\n${text.trim()}\n`, 'utf8');
 }
 
-function createSession(config, question, answer, pageContext) {
+function createSession(config, question, answer, pageContext, versions) {
   const sessionId = nowId('advisor');
   const sessionDir = path.join(config.recordDir, sessionId);
   ensureDir(sessionDir);
   ensureDir(config.notesDir);
-  const facts = collectWorkspaceFacts(config.workspace);
+  const facts = (versions && versions.code) ? {
+    root: versions.code.root,
+    branch: versions.code.branch,
+    commit: versions.code.commit,
+    fullCommit: versions.code.fullCommit,
+    dirty: versions.code.dirty,
+  } : collectWorkspaceFacts(config.workspace);
   const metadata = {
     schemaVersion: SCHEMA_VERSION,
     sessionId,
@@ -408,6 +418,7 @@ function createSession(config, question, answer, pageContext) {
     createdAt: new Date().toISOString(),
     workspace: config.workspace,
     git: facts,
+    versions: versions || null,
     runtime: config.runtime || { mode: 'none' },
     pageContext: pageContext || null,
     readOnly: true,
@@ -419,13 +430,18 @@ function createSession(config, question, answer, pageContext) {
     turns: 1,
   };
   writeJson(path.join(sessionDir, 'session.json'), metadata);
+  if (versions) writeJson(path.join(sessionDir, 'versions.json'), versions);
   fs.writeFileSync(path.join(sessionDir, 'question.md'), `${question.trim()}\n`, 'utf8');
   fs.writeFileSync(path.join(sessionDir, 'answer.md'), `${answer.trim()}\n`, 'utf8');
   if (pageContext) writeJson(path.join(sessionDir, 'page-context.json'), pageContext);
-  fs.writeFileSync(path.join(sessionDir, 'transcript.md'), `# 顾问会话 ${sessionId}\n\n- 项目：${metadata.project || ''}\n- 任务：${metadata.task || ''}\n- 工作区提交：${facts.commit || 'unknown'}\n- 只读：是\n`, 'utf8');
+  const deployLine = versions && versions.deploy
+    ? (versions.deploy.releaseSha || versions.deploy.currentBasename || versions.deploy.status || 'unknown')
+    : 'n/a';
+  const cmp = versions && versions.comparison ? versions.comparison.status : 'n/a';
+  fs.writeFileSync(path.join(sessionDir, 'transcript.md'), `# 顾问会话 ${sessionId}\n\n- 项目：${metadata.project || ''}\n- 任务：${metadata.task || ''}\n- 代码提交：${facts.commit || 'unknown'}\n- 部署引用：${deployLine}\n- 版本比较：${cmp}\n- 只读：是\n`, 'utf8');
   appendTranscript(path.join(sessionDir, 'transcript.md'), 'expert', question);
   appendTranscript(path.join(sessionDir, 'transcript.md'), 'agent', answer);
-  return { sessionDir, metadata, answer };
+  return { sessionDir, metadata, answer, versions };
 }
 
 function loadSession(sessionArg) {
@@ -471,19 +487,45 @@ function pageContextFromPinAskBatch(batch) {
   };
 }
 
-function askQuestion(config, { question, pageContext = null, dryRun = false } = {}) {
+function captureVersions(config, { includeDeploySnapshot = true } = {}) {
+  const { bindVersions } = require('./version-binding');
+  const { runSshOp, defaultAuditPath } = require('./ssh-readonly');
+  return bindVersions(config, {
+    collectWorkspaceFactsFn: collectWorkspaceFacts,
+    runSshOpFn: runSshOp,
+    auditPath: defaultAuditPath(config.project),
+    includeDeploySnapshot,
+  });
+}
+
+function askQuestion(config, {
+  question,
+  pageContext = null,
+  dryRun = false,
+  includeDeploySnapshot = true,
+} = {}) {
   if (!question || !String(question).trim()) throw new Error('missing question');
   const runtimeConfig = { ...config, dryRun: Boolean(dryRun) };
+  // Real ask + ssh: one guarded deploy-snapshot. dry-run never hits remote.
+  const versions = captureVersions(runtimeConfig, {
+    includeDeploySnapshot: Boolean(includeDeploySnapshot) && !dryRun,
+  });
   const answer = runDsh(runtimeConfig, buildPrompt({
     config: runtimeConfig,
     question,
     mode: 'answer',
     pageContext,
+    versions,
   }));
-  return createSession(runtimeConfig, question, answer, pageContext);
+  return createSession(runtimeConfig, question, answer, pageContext, versions);
 }
 
-function followupQuestion(sessionDirOrMeta, { question, pageContext = null, dryRun = false } = {}) {
+function followupQuestion(sessionDirOrMeta, {
+  question,
+  pageContext = null,
+  dryRun = false,
+  includeDeploySnapshot = false,
+} = {}) {
   const { sessionDir, metadata } = typeof sessionDirOrMeta === 'string'
     ? loadSession(sessionDirOrMeta)
     : sessionDirOrMeta;
@@ -491,12 +533,18 @@ function followupQuestion(sessionDirOrMeta, { question, pageContext = null, dryR
   const config = loadConfig(metadata.configPath);
   config.dryRun = Boolean(dryRun);
   const transcript = fs.readFileSync(path.join(sessionDir, 'transcript.md'), 'utf8');
+  let versions = metadata.versions || null;
+  if (includeDeploySnapshot && !dryRun) {
+    versions = captureVersions(config, { includeDeploySnapshot: true });
+    writeJson(path.join(sessionDir, 'versions.json'), versions);
+  }
   const answer = runDsh(config, buildPrompt({
     config,
     question,
     mode: 'answer',
     transcript,
     pageContext: pageContext || metadata.pageContext || null,
+    versions,
   }));
   const turn = metadata.turns + 1;
   fs.writeFileSync(path.join(sessionDir, `turn-${String(turn).padStart(3, '0')}-question.md`), `${question.trim()}\n`, 'utf8');
@@ -504,8 +552,12 @@ function followupQuestion(sessionDirOrMeta, { question, pageContext = null, dryR
   if (pageContext) writeJson(path.join(sessionDir, `turn-${String(turn).padStart(3, '0')}-page-context.json`), pageContext);
   appendTranscript(path.join(sessionDir, 'transcript.md'), 'expert', question);
   appendTranscript(path.join(sessionDir, 'transcript.md'), 'agent', answer);
-  updateSession(sessionDir, { turns: turn, updatedAt: new Date().toISOString() });
-  return { sessionDir, metadata: { ...metadata, turns: turn }, answer };
+  updateSession(sessionDir, {
+    turns: turn,
+    updatedAt: new Date().toISOString(),
+    ...(versions ? { versions } : {}),
+  });
+  return { sessionDir, metadata: { ...metadata, turns: turn, versions }, answer, versions };
 }
 
 function initProject({
@@ -587,6 +639,7 @@ module.exports = {
   askQuestion,
   followupQuestion,
   initProject,
+  captureVersions,
   formatPageContext,
   formatRuntime,
   formatContextNotes,
@@ -596,4 +649,5 @@ module.exports = {
   normalizeRuntime,
   isInside,
   appendTranscript,
+  collectWorkspaceFacts,
 };
