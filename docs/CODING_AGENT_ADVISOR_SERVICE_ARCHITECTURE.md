@@ -83,7 +83,7 @@ Runner 是把各模块接起来的薄进程，不是业务 App 的插件，也�
 | Response Writer | 把回答和追问结果返回给 PinAsk/CLI |
 | Workspace Writer | 保存会话、证据和查询笔记 |
 
-当前状态：`readonly-advisor` CLI 已实现部分会话、追问、提案和研发决定；PinAsk 到 Runner 的薄连接仍是计划。
+当前状态：`readonly-advisor` CLI 已实现会话、追问、提案和研发决定；`runner/server.js` 提供本机 HTTP，可接 PinAsk batch 与 `/ask`。
 
 ### 3.3 证据访问模块：Evidence Access
 

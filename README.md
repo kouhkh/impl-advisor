@@ -8,6 +8,7 @@
 
 ```text
 readonly-advisor/   # CLI：init / ask / followup / propose / review
+runner/             # 薄 HTTP：接 PinAsk batch /ask
 docs/               # 概要、详设、架构、开发计划
 ```
 
@@ -19,28 +20,23 @@ docs/               # 概要、详设、架构、开发计划
 ## 快速开始
 
 ```bash
-# 配置与会话默认落在 ~/.impl-advisor/<project>/，不会写进目标仓库
+# 配置、会话、notes 默认落在 ~/.impl-advisor/<project>/，不会写进目标仓库
 node readonly-advisor/cli.js init \
   --project planora \
   --task "技术规格书语气改写" \
-  --workspace /path/to/planora
+  --workspace /path/to/planora \
+  --runtime-mode export-dir \
+  --export-dir /path/to/planora-exports
 
 node readonly-advisor/cli.js ask \
   --config ~/.impl-advisor/planora/project.json \
   --question "为什么这句话被改写？请定位证据。"
+
+# PinAsk endpoint -> http://127.0.0.1:8787/api/pinask
+npm run runner -- --config ~/.impl-advisor/planora/project.json
 ```
 
-如需指定外部路径：
-
-```bash
-node readonly-advisor/cli.js init \
-  --project planora \
-  --workspace /path/to/planora \
-  --output /path/to/external/project.json \
-  --recordDir /path/to/external/sessions
-```
-
-把 `--output` 或 `--recordDir` 指回目标仓库会被拒绝。
+把 `--output` / `--recordDir` / `--notesDir` 指回目标仓库会被拒绝。
 
 ## 测试
 
@@ -54,9 +50,10 @@ npm test
 - [概要设计](docs/CODING_AGENT_RUNTIME_ADVISOR_OVERVIEW.md)
 - [详细设计](docs/CODING_AGENT_RUNTIME_ADVISOR_DETAILED_DESIGN.md)
 - [服务架构](docs/CODING_AGENT_ADVISOR_SERVICE_ARCHITECTURE.md)
+- [Runner](runner/README.md)
 
 ## 当前边界（P0）
 
-已做：CLI 会话闭环；默认外部工作区；追问携带历史。
+已做：CLI 会话闭环；默认外部工作区；追问历史；`export-dir`；页面事实；薄 Runner。
 
-计划中：薄 Runner 接 PinAsk、`export-dir` 运行材料、外部 Context Notes。详见开发计划。
+计划中：Planora 真实导出冒烟、Context Notes 按需生成、PinAsk 答案展示。详见开发计划。

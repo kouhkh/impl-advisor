@@ -6,7 +6,8 @@
   "scripts": {
     "test": "node readonly-advisor/cli-test.js",
     "test:readonly-advisor": "node readonly-advisor/cli-test.js",
-    "advisor": "node readonly-advisor/cli.js"
+    "advisor": "node readonly-advisor/cli.js",
+    "runner": "node runner/server.js"
   },
   "engines": {
     "node": ">=18"

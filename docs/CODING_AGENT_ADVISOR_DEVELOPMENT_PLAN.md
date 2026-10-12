@@ -20,13 +20,13 @@
 | 组件/模块 | 状态 |
 |---|---|
 | Page Connector / PinAsk | `[已实现]`，`/Users/ltc/CursorProject/中交机电局项目/pinask`；页面端到端连接计划中 |
-| Advisor Runner | `[MVP]` 计划实现；连接入口、读取器、DSH 和工作区 |
+| Advisor Runner | `[已实现]` `runner/server.js`：本机 HTTP，接 PinAsk/`/ask`；DSH 仍走 CLI 封装 |
 | Code Access | `[MVP]` 本地目录、Git 或 SSH 只读 |
-| Runtime Access | `[MVP]` Planora 固定导出目录；SSH/只读命令在 P1 验证 |
+| Runtime Access | `[已实现]` `runtime.mode=export-dir`；SSH/只读命令在 P1 验证 |
 | Generic Tool Executor | `[MVP]` 优先复用 DSH 的目录、读文件、搜索和版本工具 |
 | DSH Adapter | `[已实现]` `readonly-advisor` 调用 DSH headless |
 | Context Notes | `[MVP]` 外部少量查询笔记；不做完整知识库 |
-| Advisor Workspace | `[MVP]` 外部会话、证据和笔记；默认不写目标仓库 |
+| Advisor Workspace | `[已实现]` 默认 `~/.impl-advisor/<project>/{project.json,sessions,notes}`；默认不写目标仓库 |
 | Evidence Checker / Answer Composer | `[MVP]` Runner 内的确定性检查和回答组织组件 |
 | Proposal / Developer Review | `[已实现]` CLI 可生成建议并记录决定；不自动改代码 |
 | 结构索引 Provider | `[P1/P2]` 失败信号触发 |
@@ -41,12 +41,12 @@
 
 1. `[已完成]` 修正 `readonly-advisor` 默认配置位置；配置/会话默认 `~/.impl-advisor/<project>/`，禁止写入目标仓库；
 2. `[已完成]` 普通追问（answer）提示词注入会话历史；`followup` / `propose` 均带 transcript；
-3. 在仓库外建立 Advisor Workspace（notes / evidence 目录约定）；
-4. 编写薄 Runner，接收 PinAsk 页面事实并调用现有 CLI/DSH；
-5. 使用 Planora 实际运行材料验证固定导出目录读取；
-6. 提供通用代码工具：列目录、读文件、受限搜索、Git 版本读取；
-7. 按需生成少量 Context Notes，不要求首问前准备完整地图；
-8. 保存证据、会话、版本和缺失材料；多候选运行时追问澄清。
+3. `[已完成]` 外部 Advisor Workspace：`sessions/` + `notes/`；
+4. `[已完成]` `runtime.mode=export-dir` 与页面事实（`--page-context` / PinAsk batch）；
+5. `[已完成]` 薄 Runner：`POST /api/pinask`、`POST /ask`；
+6. 使用 Planora 实际运行材料验证固定导出目录读取；
+7. 提供通用代码工具：列目录、读文件、受限搜索、Git 版本读取（优先复用 DSH）；
+8. 按需生成少量 Context Notes；多候选运行时追问澄清。
 
 出口：项目仓库没有新增顾问文件；同一问题能给出证据或明确缺证。
 
@@ -82,11 +82,12 @@
 
 ## 5. 下一步代码任务
 
-1. `[已完成]` 外部配置路径 + 普通追问历史（见 `readonly-advisor/cli.js` 与 `npm test`）；
-2. 增加页面事实和 `runtime.mode=export-dir` 的配置支持；
-3. 编写薄 Runner：接收 PinAsk batch，调用 CLI/DSH，回传回答和证据；
-4. 使用 Planora 实际运行材料完成端到端冒烟；
-5. 记录 Context Notes 和人工确认，不写入 Planora。
+1. `[已完成]` 外部配置路径 + 普通追问历史；
+2. `[已完成]` 页面事实 + `runtime.mode=export-dir`；
+3. `[已完成]` 薄 Runner（PinAsk batch / `/ask`）；
+4. 使用 Planora 实际运行材料完成端到端冒烟（真实 DSH，非 dry-run）；
+5. 按需写入 Context Notes 与人工确认，不写入 Planora；
+6. PinAsk overlay 展示 Runner 返回的 `answer`（若当前仅 toast）。
 
 P0 不做：新前端、注册中心、OpenAPI、向量库、结构索引大框架、自动 Pro 路由。
 

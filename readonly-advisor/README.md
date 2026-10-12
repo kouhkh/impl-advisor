@@ -4,14 +4,13 @@
 
 ## 外部工作区（默认）
 
-配置与会话默认在：
-
 ```text
 ~/.impl-advisor/<project>/project.json
 ~/.impl-advisor/<project>/sessions/
+~/.impl-advisor/<project>/notes/
 ```
 
-不会写入目标代码仓库。若 `--output` / `--recordDir` 落在目标 `workspace` 内，命令会失败。
+不会写入目标代码仓库。若 `--output` / `--recordDir` / `--notesDir` 落在目标 `workspace` 内，命令会失败。
 
 ## 命令
 
@@ -19,11 +18,14 @@
 node readonly-advisor/cli.js init \
   --project planora \
   --task "技术规格书语气改写" \
-  --workspace /path/to/planora
+  --workspace /path/to/planora \
+  --runtime-mode export-dir \
+  --export-dir /path/to/exports
 
 node readonly-advisor/cli.js ask \
   --config ~/.impl-advisor/planora/project.json \
-  --question "为什么这句话被改写？请定位证据。"
+  --question "为什么这句话被改写？请定位证据。" \
+  --page-context /path/to/page-context.json
 
 node readonly-advisor/cli.js followup \
   --session /path/to/session \
@@ -39,7 +41,7 @@ node readonly-advisor/cli.js review \
 
 `--decision`：`approved` | `rejected` | `needs_changes`。
 
-可选配置：`taskContextPaths`、`retrieval`（只读检索命令提示）。详见根目录开发计划。
+可选配置字段：`environment`、`runtime.mode=export-dir`、`taskContextPaths`、`retrieval`。页面入口见 `runner/`。
 
 ## 边界
 

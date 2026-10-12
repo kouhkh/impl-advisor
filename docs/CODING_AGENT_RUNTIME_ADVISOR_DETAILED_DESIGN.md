@@ -103,16 +103,23 @@ PinAsk 当前不能稳定提供截图、`run_id` 或部署版本。页面有这�
 {
   "schemaVersion": "readonly-advisor-project/1",
   "project": "planora",
+  "environment": "local-test",
   "task": "技术规格书语气改写",
   "workspace": "/path/to/planora",
   "readOnly": true,
-  "recordDir": "/path/to/advisor-data/planora/sessions",
+  "recordDir": "~/.impl-advisor/planora/sessions",
+  "notesDir": "~/.impl-advisor/planora/notes",
+  "runtime": {
+    "mode": "export-dir",
+    "exportDir": "/path/to/planora-exports",
+    "notes": "只读浏览导出目录；多候选先追问"
+  },
   "taskContextPaths": [],
   "retrieval": null
 }
 ```
 
-外部运行入口、环境、版本命令和 Advisor Workspace 的专门字段是计划扩展，不能在文档中写成当前 CLI 已支持的配置。
+已支持：`environment`、`notesDir`、`runtime.mode=export-dir`、页面事实（CLI `--page-context` 与 Runner PinAsk batch）。SSH / 只读命令入口仍是后续扩展。
 
 ### 4.3 运行访问接口
 
@@ -221,7 +228,7 @@ Runner 只需要能访问代码和运行材料。与业务服务同机不会自�
 
 | 阶段 | 内容 |
 |---|---|
-| P0 | `[部分完成]` CLI 外部配置 + 追问历史已修；余下：PinAsk 页面端到端；本地 Runner；Planora 代码/运行只读；外部会话和最小查询笔记 |
+| P0 | `[部分完成]` 外部配置、追问历史、export-dir、页面事实、薄 Runner 已落地；余下：Planora 真实导出冒烟、按需 Context Notes、PinAsk 答案展示 |
 | P1 | Planora 测试环境 SSH/只读命令；可复用 RuntimeReader；确认事实；同题对比实验 |
 | P2 | 结构索引、技能草稿、页面适配器、Runtime Adapter、项目名录、跨项目记忆 |
 

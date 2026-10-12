@@ -110,7 +110,7 @@ PinAsk 页面
 
 | 阶段 | 内容 |
 |---|---|
-| P0 | `[部分完成]` CLI 外部配置 + 追问历史已修；余下：PinAsk 页面端到端；本地 Runner；Planora 代码/运行只读；外部会话和最小查询笔记 |
+| P0 | `[部分完成]` 外部配置、追问历史、export-dir、页面事实、薄 Runner 已落地；余下：Planora 真实导出冒烟、按需 Context Notes、PinAsk 答案展示 |
 | P1 | Planora 测试环境访问；可复用 RuntimeReader；确认事实；同题对比实验 |
 | P2 | 结构索引、技能草稿、页面适配器、Runtime Adapter、项目名录、跨项目和主动刷新 |
 
