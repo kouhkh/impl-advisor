@@ -41,7 +41,7 @@ PinAsk 页面
 
 - `[已实现]` PinAsk overlay：`/Users/ltc/CursorProject/中交机电局项目/pinask`；可采集 URL、页面文本、选中元素、祖先结构和时间；截图仍为 `not-captured`；
 - `[已实现]` `readonly-advisor` CLI：可调用 DSH、记录会话、追问、生成研发建议和记录研发决定；
-- `[计划]` PinAsk → Runner 的页面端到端连接；
+- `[进行中]` PinAsk → Runner：本仓 Runner 已接 `/api/pinask`；PinAsk overlay 展示 `answer` 在 `kouhkh/pinask` 迭代；
 - `[计划]` 外部查询笔记的自动生成和复用；
 - `[计划]` Planora 运行材料读取器。
 

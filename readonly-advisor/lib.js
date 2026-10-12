@@ -311,7 +311,7 @@ function pageContextFromPinAskBatch(batch) {
   if (!batch || typeof batch !== 'object') return null;
   const first = Array.isArray(batch.ui_elements) && batch.ui_elements[0] ? batch.ui_elements[0] : null;
   return {
-    page_url: (batch.scene && batch.scene.url) || batch.page_url || null,
+    page_url: (batch.scene && (batch.scene.url || batch.scene.href)) || batch.page_url || null,
     captured_at: batch.created_at || null,
     source: batch.source || 'pinask',
     ui_target: first ? {

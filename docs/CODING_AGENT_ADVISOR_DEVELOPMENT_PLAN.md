@@ -87,7 +87,7 @@
 3. `[已完成]` 薄 Runner（PinAsk batch / `/ask`）；
 4. `[已完成]` Planora 真实 export-dir + DSH 冒烟（配置在本机 `~/.impl-advisor/planora/`，不入库）；
 5. 按需写入 Context Notes 与人工确认，不写入 Planora；
-6. PinAsk overlay 展示 Runner 返回的 `answer`（若当前仅 toast）。
+6. `[进行中/PinAsk 仓]` overlay 展示 Runner 返回的 `answer`，并用返回的 `session` 做追问（改 `kouhkh/pinask`，非本仓内嵌）。
 
 P0 不做：新前端、注册中心、OpenAPI、向量库、结构索引大框架、自动 Pro 路由。
 
