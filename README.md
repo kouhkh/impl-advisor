@@ -64,4 +64,4 @@ npm test
 
 已做：CLI；外部工作区；追问历史；`export-dir`；页面事实；薄 Runner；Planora DSH 冒烟；PinAsk 答案展示；Context Notes；页面夹具 E2E。
 
-下一步（P1）：真实 SSH 运行入口、版本绑定。详见开发计划。
+P1 进行中：SSH 只读护栏已接测试机（见 [`docs/SSH_READONLY_GUARDRAILS.md`](docs/SSH_READONLY_GUARDRAILS.md)）；下一步版本绑定与运行搜索。

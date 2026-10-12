@@ -4,8 +4,9 @@
   "private": true,
   "description": "面向业务专家的实现核查顾问：只读代码与运行材料，沉淀证据与待研发确认建议",
   "scripts": {
-    "test": "node readonly-advisor/cli-test.js",
+    "test": "node readonly-advisor/cli-test.js && node readonly-advisor/ssh-readonly-test.js",
     "test:readonly-advisor": "node readonly-advisor/cli-test.js",
+    "test:ssh": "node readonly-advisor/ssh-readonly-test.js",
     "advisor": "node readonly-advisor/cli.js",
     "runner": "node runner/server.js",
     "e2e:fixture": "node fixtures/serve-e2e.js"

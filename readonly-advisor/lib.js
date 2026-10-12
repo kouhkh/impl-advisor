@@ -104,13 +104,16 @@ function normalizeRuntime(raw, workspace) {
   if (mode === 'ssh') {
     const host = raw.host || raw.sshHost;
     if (!host) throw new Error('runtime.mode=ssh requires runtime.host');
+    const root = raw.root || raw.sshRoot;
+    if (!root) throw new Error('runtime.mode=ssh requires runtime.root (remote jail)');
     return {
       mode: 'ssh',
       host: String(host),
       user: raw.user ? String(raw.user) : null,
       port: raw.port ? Number(raw.port) : 22,
-      root: raw.root ? String(raw.root) : null,
+      root: String(root),
       notes: typeof raw.notes === 'string' ? raw.notes : '',
+      limits: raw.limits && typeof raw.limits === 'object' ? raw.limits : undefined,
     };
   }
   const exportDir = path.resolve(raw.exportDir || '');
@@ -182,10 +185,9 @@ function formatRuntime(config) {
     return `运行材料（只读，export-dir）：\n目录：${runtime.exportDir}\n${notes}规则：\n1. 只读浏览该目录下的导出材料；\n2. 没有唯一 run_id 时先列出候选，再追问专家，不要合并不同运行；\n3. 读不到部署版本就记为未知，不能用代码 HEAD 冒充。\n`;
   }
   if (runtime.mode === 'ssh') {
+    const { formatSshOpsHelp } = require('./ssh-readonly');
     const notes = runtime.notes ? `说明：${runtime.notes}\n` : '';
-    const who = runtime.user ? `${runtime.user}@${runtime.host}` : runtime.host;
-    const root = runtime.root ? `远程根目录：${runtime.root}\n` : '';
-    return `运行材料（只读，ssh，P1）：\n目标：${who}:${runtime.port || 22}\n${root}${notes}规则：\n1. 仅通过已配置的只读 SSH/命令访问；不要尝试提权或写入；\n2. 没有唯一 run_id 时先列候选再追问；\n3. 读不到部署版本记为未知。\n`;
+    return `运行材料（只读，ssh，P1）：\n${formatSshOpsHelp(runtime)}\n${notes}规则：\n1. 禁止自由 shell；只能通过顾问 ssh 护栏操作（health/ls/head/find-names）；\n2. 远端资源紧张（load/mem 过高）时操作会失败，应报告缺失而不是重试轰炸；\n3. 没有唯一 run_id 时先列候选再追问；读不到部署版本记为未知。\n`;
   }
   return '';
 }

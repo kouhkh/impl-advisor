@@ -22,7 +22,7 @@
 | Page Connector / PinAsk | `[独立仓]` [kouhkh/pinask](https://github.com/kouhkh/pinask)；本仓只钉版本 [`deps/pinask.json`](../deps/pinask.json)，不内嵌源码 |
 | Advisor Runner | `[已实现]` `runner/server.js`：本机 HTTP，接 PinAsk/`/ask`；DSH 仍走 CLI 封装 |
 | Code Access | `[MVP]` 本地目录、Git 或 SSH 只读 |
-| Runtime Access | `[已实现]` `export-dir`；`ssh` 配置已可写入提示词，真实 SSH 探测仍属 P1 |
+| Runtime Access | `[已实现]` `export-dir`；`ssh` 护栏执行器已接 123（白名单/超时/load 拒绝/审计），见 `docs/SSH_READONLY_GUARDRAILS.md` |
 | Generic Tool Executor | `[MVP]` 优先复用 DSH 的目录、读文件、搜索和版本工具 |
 | DSH Adapter | `[已实现]` `readonly-advisor` 调用 DSH headless |
 | Context Notes | `[已实现]` `notes --refresh` 写 `map.md`/`task.md`/`runtime-reading.md`；ask 自动注入；已在 `wps-addin-poc` 测通 |
@@ -88,7 +88,7 @@
 4. `[已完成]` Planora 真实 export-dir + DSH 冒烟（配置在本机 `~/.impl-advisor/planora/`，不入库）；
 5. `[已完成]` Context Notes 刷新/注入（人工确认事实仍可后续加 `confirmed-facts`）；
 6. `[已完成/PinAsk 仓]` overlay 展示 `answer` + `session` 追问；本仓用 `deps/pinask.json` 记录兼容 commit。
-7. `[下一步/P1]` 真实 SSH 只读入口（配置字段已预留 `runtime.mode=ssh`）；版本绑定与运行搜索。
+7. `[进行中/P1]` SSH 只读护栏已接通 123（`health/ls/head/find-names`）；下一步：版本绑定、日志候选搜索、与 ask 流程更紧的编排（仍禁止自由 shell / 自动重试轰炸）。
 
 P0 不做：新前端、注册中心、OpenAPI、向量库、结构索引大框架、自动 Pro 路由。
 

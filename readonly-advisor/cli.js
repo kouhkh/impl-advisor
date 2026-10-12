@@ -18,9 +18,10 @@ const {
   writeJson,
   appendTranscript,
 } = require('./lib');
+const { runSshOp, defaultAuditPath } = require('./ssh-readonly');
 
 function usage(exitCode = 0) {
-  const text = `\nReadonly Advisor (DSH)\n\nCommands:\n  init      create a minimal project config outside the target workspace\n  ask       ask a read-only business/task question and record the session\n  followup  continue a recorded session\n  notes     refresh or show external Context Notes\n  propose   create a developer-reviewable modification proposal\n  review    record a developer decision on a proposal\n\nExamples:\n  node readonly-advisor/cli.js init \\\n    --project planora --task "技术规格书语气改写" \\\n    --workspace /path/to/planora \\\n    --runtime-mode export-dir --export-dir /path/to/exports\n\n  node readonly-advisor/cli.js notes --config ~/.impl-advisor/planora/project.json --refresh\n\n  # default config/sessions/notes live under ~/.impl-advisor/<project>/\n  node readonly-advisor/cli.js ask --config ~/.impl-advisor/planora/project.json \\\n    --question "为什么这句话被改写？请定位证据。" \\\n    --page-context /path/to/page-context.json\n\n  node readonly-advisor/cli.js propose --session /path/to/session\n`;
+  const text = `\nReadonly Advisor (DSH)\n\nCommands:\n  init      create a minimal project config outside the target workspace\n  ask       ask a read-only business/task question and record the session\n  followup  continue a recorded session\n  notes     refresh or show external Context Notes\n  ssh       guarded readonly SSH op (health|ls|head|find-names)\n  propose   create a developer-reviewable modification proposal\n  review    record a developer decision on a proposal\n\nExamples:\n  node readonly-advisor/cli.js init \\\n    --project planora --task "技术规格书语气改写" \\\n    --workspace /path/to/planora \\\n    --runtime-mode ssh --ssh-host 123 --ssh-root /opt/planora\n\n  node readonly-advisor/cli.js ssh --config ~/.impl-advisor/planora/project.json --op health\n  node readonly-advisor/cli.js ssh --config ~/.impl-advisor/planora/project.json --op ls --path current\n\n  node readonly-advisor/cli.js notes --config ~/.impl-advisor/planora/project.json --refresh\n\n  node readonly-advisor/cli.js ask --config ~/.impl-advisor/planora/project.json \\\n    --question "为什么这句话被改写？请定位证据。"\n`;
   process.stdout.write(text);
   process.exit(exitCode);
 }
@@ -70,6 +71,12 @@ function commandInit(args) {
       port: args['ssh-port'],
       root: args['ssh-root'],
       notes: args['runtime-notes'] || '',
+      limits: args['max-load-ratio'] || args['command-timeout']
+        ? {
+          maxLoadRatio: args['max-load-ratio'] ? Number(args['max-load-ratio']) : undefined,
+          commandTimeoutSec: args['command-timeout'] ? Number(args['command-timeout']) : undefined,
+        }
+        : undefined,
     }
     : null;
   const result = initProject({
@@ -170,6 +177,38 @@ function commandNotes(args) {
   process.stdout.write(`${notes}\n`);
 }
 
+function commandSsh(args) {
+  const config = loadConfig(required(args, 'config'));
+  if (!config.runtime || config.runtime.mode !== 'ssh') {
+    throw new Error('config.runtime.mode must be ssh');
+  }
+  const op = required(args, 'op');
+  const result = runSshOp(config.runtime, {
+    op,
+    args: {
+      path: args.path,
+      pattern: args.pattern,
+      lines: args.lines,
+      maxDepth: args['max-depth'],
+      maxResults: args['max-results'],
+    },
+    auditPath: args.audit || defaultAuditPath(config.project),
+  });
+  const summary = {
+    ok: true,
+    op,
+    host: config.runtime.host,
+    root: config.runtime.root,
+    ms: result.ms,
+    load1Before: result.beforeHealth && result.beforeHealth.load1,
+    load1After: (result.afterHealth && result.afterHealth.load1) || (result.beforeHealth && result.beforeHealth.load1),
+    memUsedMb: result.beforeHealth && result.beforeHealth.memUsedMb,
+    outputBytes: Buffer.byteLength(result.stdout || '', 'utf8'),
+  };
+  process.stdout.write(`${JSON.stringify(summary, null, 2)}\n\n${result.stdout}`);
+  if (!String(result.stdout || '').endsWith('\n')) process.stdout.write('\n');
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const command = args._[0];
@@ -179,6 +218,7 @@ function main() {
     if (command === 'ask') return commandAsk(args);
     if (command === 'followup') return commandFollowup(args);
     if (command === 'notes') return commandNotes(args);
+    if (command === 'ssh') return commandSsh(args);
     if (command === 'propose') return commandPropose(args);
     if (command === 'review') return commandReview(args);
     throw new Error(`unknown command: ${command}`);
