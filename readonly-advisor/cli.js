@@ -13,12 +13,14 @@ const {
   askQuestion,
   followupQuestion,
   initProject,
+  refreshContextNotes,
+  loadContextNotes,
   writeJson,
   appendTranscript,
 } = require('./lib');
 
 function usage(exitCode = 0) {
-  const text = `\nReadonly Advisor (DSH)\n\nCommands:\n  init      create a minimal project config outside the target workspace\n  ask       ask a read-only business/task question and record the session\n  followup  continue a recorded session\n  propose   create a developer-reviewable modification proposal\n  review    record a developer decision on a proposal\n\nExamples:\n  node readonly-advisor/cli.js init \\\n    --project planora --task "技术规格书语气改写" \\\n    --workspace /path/to/planora \\\n    --runtime-mode export-dir --export-dir /path/to/exports\n\n  # default config/sessions/notes live under ~/.impl-advisor/<project>/\n  node readonly-advisor/cli.js ask --config ~/.impl-advisor/planora/project.json \\\n    --question "为什么这句话被改写？请定位证据。" \\\n    --page-context /path/to/page-context.json\n\n  node readonly-advisor/cli.js propose --session /path/to/session\n`;
+  const text = `\nReadonly Advisor (DSH)\n\nCommands:\n  init      create a minimal project config outside the target workspace\n  ask       ask a read-only business/task question and record the session\n  followup  continue a recorded session\n  notes     refresh or show external Context Notes\n  propose   create a developer-reviewable modification proposal\n  review    record a developer decision on a proposal\n\nExamples:\n  node readonly-advisor/cli.js init \\\n    --project planora --task "技术规格书语气改写" \\\n    --workspace /path/to/planora \\\n    --runtime-mode export-dir --export-dir /path/to/exports\n\n  node readonly-advisor/cli.js notes --config ~/.impl-advisor/planora/project.json --refresh\n\n  # default config/sessions/notes live under ~/.impl-advisor/<project>/\n  node readonly-advisor/cli.js ask --config ~/.impl-advisor/planora/project.json \\\n    --question "为什么这句话被改写？请定位证据。" \\\n    --page-context /path/to/page-context.json\n\n  node readonly-advisor/cli.js propose --session /path/to/session\n`;
   process.stdout.write(text);
   process.exit(exitCode);
 }
@@ -60,7 +62,15 @@ function required(args, key) {
 function commandInit(args) {
   const runtimeMode = args['runtime-mode'] || null;
   const runtime = runtimeMode
-    ? { mode: runtimeMode, exportDir: args['export-dir'], notes: args['runtime-notes'] || '' }
+    ? {
+      mode: runtimeMode,
+      exportDir: args['export-dir'],
+      host: args['ssh-host'],
+      user: args['ssh-user'],
+      port: args['ssh-port'],
+      root: args['ssh-root'],
+      notes: args['runtime-notes'] || '',
+    }
     : null;
   const result = initProject({
     project: required(args, 'project'),
@@ -141,6 +151,25 @@ function commandReview(args) {
   process.stdout.write(`${path.join(sessionDir, 'review.json')}\n`);
 }
 
+function commandNotes(args) {
+  const config = loadConfig(required(args, 'config'));
+  if (args.refresh || args._[1] === 'refresh') {
+    const result = refreshContextNotes(config, { dryRun: Boolean(args['dry-run']) });
+    if (result.dryRun) {
+      process.stdout.write(`${result.prompt}\n`);
+      return;
+    }
+    process.stdout.write(`${result.files.join('\n')}\n`);
+    return;
+  }
+  const notes = loadContextNotes(config);
+  if (!notes) {
+    process.stdout.write(`(no context notes yet under ${config.notesDir})\n`);
+    return;
+  }
+  process.stdout.write(`${notes}\n`);
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const command = args._[0];
@@ -149,6 +178,7 @@ function main() {
     if (command === 'init') return commandInit(args);
     if (command === 'ask') return commandAsk(args);
     if (command === 'followup') return commandFollowup(args);
+    if (command === 'notes') return commandNotes(args);
     if (command === 'propose') return commandPropose(args);
     if (command === 'review') return commandReview(args);
     throw new Error(`unknown command: ${command}`);

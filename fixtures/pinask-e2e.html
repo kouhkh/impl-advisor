@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>impl-advisor PinAsk E2E Fixture</title>
+  <link rel="stylesheet" href="/pinask/overlay/pinask.css" />
+  <style>
+    body { font-family: "Segoe UI", system-ui, sans-serif; margin: 32px; color: #1d2a3d; }
+    h1 { font-size: 22px; }
+    .card { max-width: 720px; padding: 16px; border: 1px solid #d7deea; border-radius: 10px; }
+    .rewrite-result { margin-top: 12px; padding: 12px; background: #f5f7fa; border-radius: 8px; }
+    .hint { color: #5b6573; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>技术规格书语气改写（E2E 夹具）</h1>
+  <p class="hint">按 F9 打开 PinAsk，点选下方结果区，提问后应看到顾问回答。endpoint → 本机 Runner。</p>
+  <div class="card">
+    <div>任务：技术规格书语气改写</div>
+    <div class="rewrite-result" id="result">
+      已完成语气改写，未修改的原文已保留。示例句：对没有任何要求的部分，投标人也可以提出其技术规格，但以招标人书面确认为前提。
+    </div>
+  </div>
+  <script src="/pinask/overlay/pinask.js"></script>
+  <script>
+    PinAsk.mount({
+      hotkey: "F9",
+      storage: "server",
+      endpoint: "http://127.0.0.1:8790/api/pinask",
+      showHint: true,
+      source: "e2e-fixture",
+      context: () => ({
+        project_id: "planora",
+        environment: "local-mac",
+        task_id: "technical-spec-tone-conversion",
+      }),
+    });
+  </script>
+</body>
+</html>

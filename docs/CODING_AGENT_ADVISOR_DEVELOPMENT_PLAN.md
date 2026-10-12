@@ -22,10 +22,10 @@
 | Page Connector / PinAsk | `[独立仓]` [kouhkh/pinask](https://github.com/kouhkh/pinask)；本仓只钉版本 [`deps/pinask.json`](../deps/pinask.json)，不内嵌源码 |
 | Advisor Runner | `[已实现]` `runner/server.js`：本机 HTTP，接 PinAsk/`/ask`；DSH 仍走 CLI 封装 |
 | Code Access | `[MVP]` 本地目录、Git 或 SSH 只读 |
-| Runtime Access | `[已实现]` `runtime.mode=export-dir`；SSH/只读命令在 P1 验证 |
+| Runtime Access | `[已实现]` `export-dir`；`ssh` 配置已可写入提示词，真实 SSH 探测仍属 P1 |
 | Generic Tool Executor | `[MVP]` 优先复用 DSH 的目录、读文件、搜索和版本工具 |
 | DSH Adapter | `[已实现]` `readonly-advisor` 调用 DSH headless |
-| Context Notes | `[MVP]` 外部少量查询笔记；不做完整知识库 |
+| Context Notes | `[已实现]` `notes --refresh` 写 `map.md`/`task.md`/`runtime-reading.md`；ask 自动注入；已在 `wps-addin-poc` 测通 |
 | Advisor Workspace | `[已实现]` 默认 `~/.impl-advisor/<project>/{project.json,sessions,notes}`；默认不写目标仓库 |
 | Evidence Checker / Answer Composer | `[MVP]` Runner 内的确定性检查和回答组织组件 |
 | Proposal / Developer Review | `[已实现]` CLI 可生成建议并记录决定；不自动改代码 |
@@ -45,8 +45,8 @@
 4. `[已完成]` `runtime.mode=export-dir` 与页面事实（`--page-context` / PinAsk batch）；
 5. `[已完成]` 薄 Runner：`POST /api/pinask`、`POST /ask`；
 6. `[已完成]` Planora 真实路径冒烟：workspace=`CursorProject/.../planora`，export=`planora-tone-conversion-trace-20261010`，DSH headless 已返回带路径证据的回答（约 2026-10-12）；
-7. 提供通用代码工具：列目录、读文件、受限搜索、Git 版本读取（优先复用 DSH）；
-8. 按需生成少量 Context Notes；多候选运行时追问澄清。
+7. `[已完成]` 通用代码工具优先复用 DSH（冒烟与笔记刷新已验证）；
+8. `[已完成]` Context Notes：`notes --refresh` + ask 注入；`wps-addin-poc` 已测通；PinAsk→Runner 页面夹具 E2E 已通（dry-run）。
 
 出口：项目仓库没有新增顾问文件；同一问题能给出证据或明确缺证。
 
@@ -86,8 +86,9 @@
 2. `[已完成]` 页面事实 + `runtime.mode=export-dir`；
 3. `[已完成]` 薄 Runner（PinAsk batch / `/ask`）；
 4. `[已完成]` Planora 真实 export-dir + DSH 冒烟（配置在本机 `~/.impl-advisor/planora/`，不入库）；
-5. 按需写入 Context Notes 与人工确认，不写入 Planora；
+5. `[已完成]` Context Notes 刷新/注入（人工确认事实仍可后续加 `confirmed-facts`）；
 6. `[已完成/PinAsk 仓]` overlay 展示 `answer` + `session` 追问；本仓用 `deps/pinask.json` 记录兼容 commit。
+7. `[下一步/P1]` 真实 SSH 只读入口（配置字段已预留 `runtime.mode=ssh`）；版本绑定与运行搜索。
 
 P0 不做：新前端、注册中心、OpenAPI、向量库、结构索引大框架、自动 Pro 路由。
 

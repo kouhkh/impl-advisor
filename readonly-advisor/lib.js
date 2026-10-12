@@ -8,7 +8,7 @@ const { spawnSync } = require('node:child_process');
 
 const SCHEMA_VERSION = 'readonly-advisor-session/1';
 const CONFIG_SCHEMA_VERSION = 'readonly-advisor-project/1';
-const RUNTIME_MODES = new Set(['export-dir', 'none']);
+const RUNTIME_MODES = new Set(['export-dir', 'ssh', 'none']);
 
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
@@ -101,6 +101,18 @@ function normalizeRuntime(raw, workspace) {
     throw new Error(`unsupported runtime.mode: ${mode} (allowed: ${[...RUNTIME_MODES].join(', ')})`);
   }
   if (mode === 'none') return { mode: 'none' };
+  if (mode === 'ssh') {
+    const host = raw.host || raw.sshHost;
+    if (!host) throw new Error('runtime.mode=ssh requires runtime.host');
+    return {
+      mode: 'ssh',
+      host: String(host),
+      user: raw.user ? String(raw.user) : null,
+      port: raw.port ? Number(raw.port) : 22,
+      root: raw.root ? String(raw.root) : null,
+      notes: typeof raw.notes === 'string' ? raw.notes : '',
+    };
+  }
   const exportDir = path.resolve(raw.exportDir || '');
   if (!raw.exportDir) throw new Error('runtime.mode=export-dir requires runtime.exportDir');
   if (!fs.existsSync(exportDir) || !fs.statSync(exportDir).isDirectory()) {
@@ -169,6 +181,12 @@ function formatRuntime(config) {
     const notes = runtime.notes ? `说明：${runtime.notes}\n` : '';
     return `运行材料（只读，export-dir）：\n目录：${runtime.exportDir}\n${notes}规则：\n1. 只读浏览该目录下的导出材料；\n2. 没有唯一 run_id 时先列出候选，再追问专家，不要合并不同运行；\n3. 读不到部署版本就记为未知，不能用代码 HEAD 冒充。\n`;
   }
+  if (runtime.mode === 'ssh') {
+    const notes = runtime.notes ? `说明：${runtime.notes}\n` : '';
+    const who = runtime.user ? `${runtime.user}@${runtime.host}` : runtime.host;
+    const root = runtime.root ? `远程根目录：${runtime.root}\n` : '';
+    return `运行材料（只读，ssh，P1）：\n目标：${who}:${runtime.port || 22}\n${root}${notes}规则：\n1. 仅通过已配置的只读 SSH/命令访问；不要尝试提权或写入；\n2. 没有唯一 run_id 时先列候选再追问；\n3. 读不到部署版本记为未知。\n`;
+  }
   return '';
 }
 
@@ -200,6 +218,130 @@ function formatPageContext(pageContext) {
   return `${lines.join('\n')}\n`;
 }
 
+const NOTE_FILES = ['map.md', 'task.md', 'runtime-reading.md'];
+
+function listNoteFiles(notesDir) {
+  if (!notesDir || !fs.existsSync(notesDir)) return [];
+  return NOTE_FILES
+    .map((name) => path.join(notesDir, name))
+    .filter((file) => fs.existsSync(file));
+}
+
+function loadContextNotes(config) {
+  const files = listNoteFiles(config.notesDir);
+  if (!files.length) return '';
+  return files.map((file) => {
+    const body = fs.readFileSync(file, 'utf8').trim();
+    return `### ${path.basename(file)}\n${body}`;
+  }).join('\n\n');
+}
+
+function formatContextNotes(config) {
+  const notes = loadContextNotes(config);
+  if (!notes) return '';
+  return `外部查询笔记（顾问自建，可能过期；以实际再读为准）：\n${notes}\n`;
+}
+
+function buildNotesRefreshPrompt(config) {
+  const runtime = formatRuntime(config);
+  const task = config.task || '未指定业务任务';
+  return `你是只读顾问的笔记整理器。请阅读工作区与运行材料入口，生成三份极短查询笔记，供后续提问复用。\n\n项目：${config.project || '未命名'}\n任务：${task}\n工作区：${config.workspace}\n笔记目录（不要写入工作区）：${config.notesDir}\n${runtime}\n要求：\n1. 只读；不修改目标仓库文件。\n2. 只写实际看到的路径/目录；缺失就写“未知”。\n3. 最终只输出一个 JSON 对象（可包在 \`\`\`json 代码块中），键必须正好是：\n{"map.md":"...","task.md":"...","runtime-reading.md":"..."}\n4. 每个值是 Markdown 字符串，不超过 25 行；map=代码入口与目录；task=任务相关路径与术语；runtime-reading=运行材料怎么找、候选如何列。\n5. 不要编造 run_id 或部署版本；JSON 以外不要写解释。\n`;
+}
+
+function extractJsonObject(text) {
+  const raw = String(text || '');
+  const start = raw.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < raw.length; i += 1) {
+    const ch = raw[i];
+    if (inString) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === '\\') {
+        escape = true;
+        continue;
+      }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === '{') depth += 1;
+    if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) return raw.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+function parseNotesRefreshOutput(text) {
+  const sections = { 'map.md': '', 'task.md': '', 'runtime-reading.md': '' };
+  const raw = String(text || '');
+  const jsonText = extractJsonObject(raw);
+  if (jsonText) {
+    try {
+      const parsed = JSON.parse(jsonText);
+      for (const name of NOTE_FILES) {
+        if (typeof parsed[name] === 'string' && parsed[name].trim()) sections[name] = parsed[name].trim();
+      }
+      if (NOTE_FILES.some((name) => sections[name])) return sections;
+    } catch {
+      // fall through to markdown headings
+    }
+  }
+  const parts = raw.split(/^#{1,3}\s+`?(map\.md|task\.md|runtime-reading\.md)`?\s*$/m);
+  for (let i = 1; i < parts.length; i += 2) {
+    const name = parts[i];
+    const body = (parts[i + 1] || '').trim();
+    if (sections[name] !== undefined && body) sections[name] = body;
+  }
+  return sections;
+}
+
+function refreshContextNotes(config, { dryRun = false } = {}) {
+  ensureDir(config.notesDir);
+  if (isInside(config.notesDir, config.workspace)) {
+    throw new Error(`notesDir must stay outside target workspace: ${config.notesDir}`);
+  }
+  const runtimeConfig = { ...config, dryRun: Boolean(dryRun) };
+  const raw = runDsh(runtimeConfig, buildNotesRefreshPrompt(config));
+  if (dryRun) {
+    return { dryRun: true, prompt: raw, files: [] };
+  }
+  const rawPath = path.join(config.notesDir, 'notes-raw.md');
+  fs.writeFileSync(rawPath, `${raw.trim()}\n`, 'utf8');
+  const sections = parseNotesRefreshOutput(raw);
+  const written = [rawPath];
+  const stamp = new Date().toISOString();
+  let filled = 0;
+  for (const name of NOTE_FILES) {
+    const body = sections[name] || '';
+    if (body) filled += 1;
+    const file = path.join(config.notesDir, name);
+    fs.writeFileSync(file, `# ${name}\n\n- refreshedAt: ${stamp}\n- project: ${config.project || ''}\n- workspaceCommit: ${(collectWorkspaceFacts(config.workspace).commit) || 'unknown'}\n\n${(body || '_（本次未解析出该节；保持可退回通用搜索）_').trim()}\n`, 'utf8');
+    written.push(file);
+  }
+  writeJson(path.join(config.notesDir, 'notes-meta.json'), {
+    refreshedAt: stamp,
+    project: config.project || null,
+    files: NOTE_FILES,
+    filledSections: filled,
+    rawFile: rawPath,
+  });
+  if (filled === 0) {
+    throw new Error(`context notes refresh produced no parseable sections; see ${rawPath}`);
+  }
+  return { dryRun: false, files: written, raw, filled };
+}
+
 function buildPrompt({ config, question, mode, transcript, pageContext }) {
   const paths = config.importantPaths && Object.entries(config.importantPaths)
     .map(([name, value]) => `- ${name}: ${value}`).join('\n');
@@ -210,10 +352,11 @@ function buildPrompt({ config, question, mode, transcript, pageContext }) {
     : '';
   const retrieval = formatRetrieval(config);
   const runtime = formatRuntime(config);
+  const contextNotes = formatContextNotes(config);
   const page = formatPageContext(pageContext);
   const task = config.task || '未指定业务任务';
   const envLine = config.environment ? `环境：${config.environment}\n` : '';
-  const base = `你是项目的只读 coding agent 顾问。\n\n项目：${config.project || '未命名项目'}\n${envLine}目标任务：${task}\n工作区：${config.workspace}\n${paths ? `重要路径：\n${paths}\n` : ''}${taskContext ? `业务任务资料（优先读取）：\n${taskContext}\n` : ''}${terms ? `项目术语：\n${terms}\n` : ''}${retrieval ? `${retrieval}\n` : ''}${runtime}${page ? `\n${page}\n` : ''}\n硬性要求：\n1. 只读检查，不修改文件、不提交、不部署、不写业务数据。\n2. 只把实际读取到的内容当作事实；把代码推测和缺失材料分开。\n3. 回答中列出实际读取的文件路径、关键符号或命令。\n4. 不要输出凭据、环境变量值、密钥或隐私数据。\n5. 如果无法还原某次实际运行，要明确说明缺少什么。\n\n专家问题：\n${question}\n`;
+  const base = `你是项目的只读 coding agent 顾问。\n\n项目：${config.project || '未命名项目'}\n${envLine}目标任务：${task}\n工作区：${config.workspace}\n${paths ? `重要路径：\n${paths}\n` : ''}${taskContext ? `业务任务资料（优先读取）：\n${taskContext}\n` : ''}${terms ? `项目术语：\n${terms}\n` : ''}${retrieval ? `${retrieval}\n` : ''}${runtime}${contextNotes ? `\n${contextNotes}\n` : ''}${page ? `\n${page}\n` : ''}\n硬性要求：\n1. 只读检查，不修改文件、不提交、不部署、不写业务数据。\n2. 只把实际读取到的内容当作事实；把代码推测和缺失材料分开。\n3. 回答中列出实际读取的文件路径、关键符号或命令。\n4. 不要输出凭据、环境变量值、密钥或隐私数据。\n5. 如果无法还原某次实际运行，要明确说明缺少什么。\n\n专家问题：\n${question}\n`;
   const history = transcript ? `\n已有专家会话记录：\n${transcript}\n` : '';
   if (mode === 'proposal') {
     return `${base}\n请在只读基础上生成一份“待研发确认的修改建议”，不要直接改代码。必须包含：\n- 问题复述；\n- 直接证据及路径；\n- 可能涉及的规则、配置、workflow、Agent、工具或代码对象；\n- 建议修改范围和不应修改的范围；\n- 验证、回放或评测方式；\n- 风险、未知项和需要研发确认的问题。\n如果证据不足，不要猜测具体实现。\n${history}`;
@@ -422,6 +565,7 @@ function initProject({
 module.exports = {
   SCHEMA_VERSION,
   CONFIG_SCHEMA_VERSION,
+  NOTE_FILES,
   ensureDir,
   writeJson,
   readJson,
@@ -443,6 +587,10 @@ module.exports = {
   initProject,
   formatPageContext,
   formatRuntime,
+  formatContextNotes,
+  loadContextNotes,
+  refreshContextNotes,
+  parseNotesRefreshOutput,
   normalizeRuntime,
   isInside,
   appendTranscript,

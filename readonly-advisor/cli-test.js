@@ -112,6 +112,31 @@ result = spawnSync(process.execPath, [cli, 'review', '--session', sessionDir, '-
 assert.equal(result.status, 0, result.stderr);
 assert.equal(JSON.parse(fs.readFileSync(path.join(sessionDir, 'review.json'))).decision, 'needs_changes');
 
+result = spawnSync(process.execPath, [cli, 'notes', '--config', config, '--refresh', '--dry-run'], { encoding: 'utf8' });
+assert.equal(result.status, 0, result.stderr);
+assert.match(result.stdout, /"map\.md"/);
+assert.match(result.stdout, /"task\.md"/);
+assert.match(result.stdout, /"runtime-reading\.md"/);
+
+const { parseNotesRefreshOutput } = require('./lib');
+const parsedNotes = parseNotesRefreshOutput('```json\n{"map.md":"entry A","task.md":"task B","runtime-reading.md":"run C"}\n```');
+assert.equal(parsedNotes['map.md'], 'entry A');
+assert.equal(parsedNotes['task.md'], 'task B');
+assert.equal(parsedNotes['runtime-reading.md'], 'run C');
+const nestedFence = parseNotesRefreshOutput('```json\n{"map.md":"a","task.md":"b","runtime-reading.md":"use \\n```bash\\nnpm test\\n```\\n"}\n```');
+assert.equal(nestedFence['map.md'], 'a');
+assert.match(nestedFence['runtime-reading.md'], /npm test/);
+
+// simulate refreshed notes and ensure ask prompt injects them
+fs.writeFileSync(path.join(notes, 'map.md'), '# map.md\n\n- entry: lib/fixture.ts\n');
+fs.writeFileSync(path.join(notes, 'task.md'), '# task.md\n\n- task hint: fixture\n');
+fs.writeFileSync(path.join(notes, 'runtime-reading.md'), '# runtime-reading.md\n\n- export top: run-a.txt\n');
+result = spawnSync(process.execPath, [cli, 'ask', '--config', config, '--question', '笔记生效了吗？', '--dry-run'], { encoding: 'utf8' });
+assert.equal(result.status, 0, result.stderr);
+assert.match(result.stdout, /外部查询笔记/);
+assert.match(result.stdout, /lib\/fixture\.ts/);
+assert.match(result.stdout, /run-a\.txt/);
+
 function testRunner() {
   return new Promise((resolve, reject) => {
     const runtimeConfig = loadConfig(config);

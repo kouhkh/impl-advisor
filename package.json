@@ -7,7 +7,8 @@
     "test": "node readonly-advisor/cli-test.js",
     "test:readonly-advisor": "node readonly-advisor/cli-test.js",
     "advisor": "node readonly-advisor/cli.js",
-    "runner": "node runner/server.js"
+    "runner": "node runner/server.js",
+    "e2e:fixture": "node fixtures/serve-e2e.js"
   },
   "implAdvisor": {
     "externalDeps": {

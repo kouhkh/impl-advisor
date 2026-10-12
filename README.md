@@ -35,6 +35,13 @@ node readonly-advisor/cli.js ask \
 
 # PinAsk endpoint -> http://127.0.0.1:8787/api/pinask
 npm run runner -- --config ~/.impl-advisor/planora/project.json
+
+# 外部查询笔记（不写目标仓）
+node readonly-advisor/cli.js notes --config ~/.impl-advisor/planora/project.json --refresh
+
+# 页面夹具 E2E：另开 dry-run Runner 在 8790，再打开 http://127.0.0.1:8791/
+npm run runner -- --config ~/.impl-advisor/planora/project.json --port 8790 --dry-run
+npm run e2e:fixture
 ```
 
 把 `--output` / `--recordDir` / `--notesDir` 指回目标仓库会被拒绝。
@@ -55,6 +62,6 @@ npm test
 
 ## 当前边界（P0）
 
-已做：CLI 会话闭环；外部工作区；追问历史；`export-dir`；页面事实；薄 Runner；Planora DSH 冒烟；PinAsk 答案展示（在 PinAsk 仓，版本钉在 `deps/pinask.json`）。
+已做：CLI；外部工作区；追问历史；`export-dir`；页面事实；薄 Runner；Planora DSH 冒烟；PinAsk 答案展示；Context Notes；页面夹具 E2E。
 
-计划中：按需 Context Notes。详见开发计划。
+下一步（P1）：真实 SSH 运行入口、版本绑定。详见开发计划。
