@@ -44,7 +44,7 @@
 3. `[已完成]` 外部 Advisor Workspace：`sessions/` + `notes/`；
 4. `[已完成]` `runtime.mode=export-dir` 与页面事实（`--page-context` / PinAsk batch）；
 5. `[已完成]` 薄 Runner：`POST /api/pinask`、`POST /ask`；
-6. 使用 Planora 实际运行材料验证固定导出目录读取；
+6. `[已完成]` Planora 真实路径冒烟：workspace=`CursorProject/.../planora`，export=`planora-tone-conversion-trace-20261010`，DSH headless 已返回带路径证据的回答（约 2026-10-12）；
 7. 提供通用代码工具：列目录、读文件、受限搜索、Git 版本读取（优先复用 DSH）；
 8. 按需生成少量 Context Notes；多候选运行时追问澄清。
 
@@ -85,7 +85,7 @@
 1. `[已完成]` 外部配置路径 + 普通追问历史；
 2. `[已完成]` 页面事实 + `runtime.mode=export-dir`；
 3. `[已完成]` 薄 Runner（PinAsk batch / `/ask`）；
-4. 使用 Planora 实际运行材料完成端到端冒烟（真实 DSH，非 dry-run）；
+4. `[已完成]` Planora 真实 export-dir + DSH 冒烟（配置在本机 `~/.impl-advisor/planora/`，不入库）；
 5. 按需写入 Context Notes 与人工确认，不写入 Planora；
 6. PinAsk overlay 展示 Runner 返回的 `answer`（若当前仅 toast）。
 
