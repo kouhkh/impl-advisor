@@ -105,12 +105,18 @@ assert.ok(sessionMeta.versions.comparison);
 assert.ok(sessionMeta.runtimeSearch);
 assert.ok(sessionDir.startsWith(records));
 
+assert.ok(fs.existsSync(path.join(sessionDir, 'working-memory.json')));
 result = spawnSync(process.execPath, [cli, 'followup', '--session', sessionDir, '--question', '还有什么？', '--dry-run'], { encoding: 'utf8' });
 assert.equal(result.status, 0, result.stderr);
-assert.match(result.stdout, /已有专家会话记录/);
+// M4：追问只带工作记忆摘要，不再灌整份 transcript。
+assert.match(result.stdout, /顾问工作记忆/);
 assert.match(result.stdout, /为什么？/);
 assert.match(result.stdout, /还有什么？/);
+assert.doesNotMatch(result.stdout, /已有专家会话记录：\n# 顾问会话/);
 assert.equal(JSON.parse(fs.readFileSync(path.join(sessionDir, 'session.json'))).turns, 2);
+const wm = JSON.parse(fs.readFileSync(path.join(sessionDir, 'working-memory.json'), 'utf8'));
+assert.ok(Array.isArray(wm.evidenceCards));
+assert.ok(wm.turns.length >= 1);
 
 result = spawnSync(process.execPath, [cli, 'propose', '--session', sessionDir, '--dry-run'], { encoding: 'utf8' });
 assert.equal(result.status, 0, result.stderr);

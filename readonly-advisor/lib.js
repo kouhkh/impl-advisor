@@ -346,7 +346,16 @@ function refreshContextNotes(config, { dryRun = false } = {}) {
   return { dryRun: false, files: written, raw, filled };
 }
 
-function buildPrompt({ config, question, mode, transcript, pageContext, versions, runtimeSearch }) {
+function buildPrompt({
+  config,
+  question,
+  mode,
+  transcript,
+  workingMemoryBrief = null,
+  pageContext,
+  versions,
+  runtimeSearch,
+}) {
   const { formatVersionBinding } = require('./version-binding');
   const { formatRuntimeSearch } = require('./runtime-search');
   const paths = config.importantPaths && Object.entries(config.importantPaths)
@@ -364,8 +373,12 @@ function buildPrompt({ config, question, mode, transcript, pageContext, versions
   const page = formatPageContext(pageContext);
   const task = config.task || '未指定业务任务';
   const envLine = config.environment ? `环境：${config.environment}\n` : '';
-  const base = `你是项目的只读 coding agent 顾问。\n\n项目：${config.project || '未命名项目'}\n${envLine}目标任务：${task}\n工作区：${config.workspace}\n${paths ? `重要路径：\n${paths}\n` : ''}${taskContext ? `业务任务资料（优先读取）：\n${taskContext}\n` : ''}${terms ? `项目术语：\n${terms}\n` : ''}${retrieval ? `${retrieval}\n` : ''}${runtime}${versionBlock ? `\n${versionBlock}\n` : ''}${runtimeBlock ? `\n${runtimeBlock}\n` : ''}${contextNotes ? `\n${contextNotes}\n` : ''}${page ? `\n${page}\n` : ''}\n硬性要求：\n1. 只读检查，不修改文件、不提交、不部署、不写业务数据。\n2. 只把实际读取到的内容当作事实；把代码推测和缺失材料分开。\n3. 回答中列出实际读取的文件路径、关键符号或命令。\n4. 不要输出凭据、环境变量值、密钥或隐私数据。\n5. 如果无法还原某次实际运行，要明确说明缺少什么。\n6. 必须区分代码工作区版本与部署/运行版本；不一致或未知时不得用代码 HEAD 冒充部署。\n7. 多个运行候选时必须先追问确认，不得把不同运行材料拼成一次事实。\n\n专家问题：\n${question}\n`;
-  const history = transcript ? `\n已有专家会话记录：\n${transcript}\n` : '';
+  const base = `你是项目的只读 coding agent 顾问。\n\n项目：${config.project || '未命名项目'}\n${envLine}目标任务：${task}\n工作区：${config.workspace}\n${paths ? `重要路径：\n${paths}\n` : ''}${taskContext ? `业务任务资料（优先读取）：\n${taskContext}\n` : ''}${terms ? `项目术语：\n${terms}\n` : ''}${retrieval ? `${retrieval}\n` : ''}${runtime}${versionBlock ? `\n${versionBlock}\n` : ''}${runtimeBlock ? `\n${runtimeBlock}\n` : ''}${contextNotes ? `\n${contextNotes}\n` : ''}${page ? `\n${page}\n` : ''}\n硬性要求：\n1. 只读检查，不修改文件、不提交、不部署、不写业务数据。\n2. 只把实际读取到的内容当作事实；把代码推测和缺失材料分开。\n3. 回答中列出实际读取的文件路径、关键符号或命令。\n4. 不要输出凭据、环境变量值、密钥或隐私数据。\n5. 如果无法还原某次实际运行，要明确说明缺少什么。\n6. 必须区分代码工作区版本与部署/运行版本；不一致或未知时不得用代码 HEAD 冒充部署。\n7. 多个运行候选时必须先追问确认，不得把不同运行材料拼成一次事实。\n8. 优先使用工作记忆与证据卡片指针；完整历史仅在磁盘，不得假设已读过未注入的 transcript。\n\n专家问题：\n${question}\n`;
+  // 追问默认只带工作记忆摘要（M4）；完整 transcript 仅落盘。
+  // proposal 等少数场景仍可显式传入 transcript。
+  const history = workingMemoryBrief
+    ? `\n${workingMemoryBrief}\n`
+    : (transcript ? `\n已有专家会话记录：\n${transcript}\n` : '');
   if (mode === 'proposal') {
     return `${base}\n请在只读基础上生成一份“待研发确认的修改建议”，不要直接改代码。必须包含：\n- 问题复述；\n- 直接证据及路径；\n- 可能涉及的规则、配置、workflow、Agent、工具或代码对象；\n- 建议修改范围和不应修改的范围；\n- 验证、回放或评测方式；\n- 风险、未知项和需要研发确认的问题。\n如果证据不足，不要猜测具体实现。\n${history}`;
   }
@@ -448,6 +461,16 @@ function createSession(config, question, answer, pageContext, versions, runtimeS
   fs.writeFileSync(path.join(sessionDir, 'transcript.md'), `# 顾问会话 ${sessionId}\n\n- 项目：${metadata.project || ''}\n- 任务：${metadata.task || ''}\n- 代码提交：${facts.commit || 'unknown'}\n- 部署引用：${deployLine}\n- 版本比较：${cmp}\n- 运行候选：${runStatus || 'n/a'}\n- 只读：是\n`, 'utf8');
   appendTranscript(path.join(sessionDir, 'transcript.md'), 'expert', question);
   appendTranscript(path.join(sessionDir, 'transcript.md'), 'agent', answer);
+  const { updateWorkingMemory } = require('./working-memory');
+  updateWorkingMemory(sessionDir, {
+    sessionId,
+    question,
+    answer,
+    versions,
+    runtimeSearch,
+    maxTurns: config.memory && config.memory.workingTurns,
+    maxCards: config.memory && config.memory.maxCards,
+  });
   return { sessionDir, metadata, answer, versions, runtimeSearch };
 }
 
@@ -656,7 +679,11 @@ function followupQuestion(sessionDirOrMeta, {
   if (!question || !String(question).trim()) throw new Error('missing question');
   const config = loadConfig(metadata.configPath);
   config.dryRun = Boolean(dryRun);
-  const transcript = fs.readFileSync(path.join(sessionDir, 'transcript.md'), 'utf8');
+  const { buildWorkingMemoryBrief, updateWorkingMemory } = require('./working-memory');
+  // 追问只注入工作记忆摘要，不再把整份 transcript.md 灌回模型。
+  const workingMemoryBrief = buildWorkingMemoryBrief(sessionDir, {
+    budget: (config.memory && config.memory.briefBudget) || undefined,
+  });
   let versions = metadata.versions || null;
   let runtimeSearch = metadata.runtimeSearch || null;
   if (!dryRun && (includeDeploySnapshot || includeRuntimeCandidates)) {
@@ -680,7 +707,7 @@ function followupQuestion(sessionDirOrMeta, {
     config,
     question,
     mode: 'answer',
-    transcript,
+    workingMemoryBrief,
     pageContext: pageContext || metadata.pageContext || null,
     versions,
     runtimeSearch,
@@ -691,6 +718,15 @@ function followupQuestion(sessionDirOrMeta, {
   if (pageContext) writeJson(path.join(sessionDir, `turn-${String(turn).padStart(3, '0')}-page-context.json`), pageContext);
   appendTranscript(path.join(sessionDir, 'transcript.md'), 'expert', question);
   appendTranscript(path.join(sessionDir, 'transcript.md'), 'agent', answer);
+  updateWorkingMemory(sessionDir, {
+    sessionId: metadata.sessionId,
+    question,
+    answer,
+    versions,
+    runtimeSearch,
+    maxTurns: config.memory && config.memory.workingTurns,
+    maxCards: config.memory && config.memory.maxCards,
+  });
   updateSession(sessionDir, {
     turns: turn,
     updatedAt: new Date().toISOString(),
