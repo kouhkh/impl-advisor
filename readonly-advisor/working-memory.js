@@ -201,7 +201,10 @@ function evaluateStop(memory, { addedCardCount = 0 } = {}) {
     && addedCardCount === 0) {
     return 'no_new_evidence';
   }
-  if (memory.runCandidate && memory.runCandidate.status === 'multiple') {
+  // 专家已选定 selected 后不再因 multiple 停搜（允许 log_slice / 继续取证）
+  if (memory.runCandidate
+    && memory.runCandidate.status === 'multiple'
+    && !memory.runCandidate.selected) {
     return 'need_confirmation';
   }
   return null;

@@ -73,3 +73,5 @@ npm test
 已做：CLI；外部工作区；`export-dir`；页面事实；薄 Runner；SSH 护栏；版本绑定；运行候选；**证据网关 + 工作记忆（首问/追问）**；PinAsk 入口。
 
 已补：`run-memory` 骨架；本机独立用户 ACL 脚本（见 [`docs/LOCAL_DEDICATED_USER_BOUNDARY.md`](docs/LOCAL_DEDICATED_USER_BOUNDARY.md)）；`runners.js` 支持 `--runner opencode` 对照。
+
+Harness 对照决议（2026-10-14）：**默认不再测 Cline**；默认保留 `DSH×v4-pro`（同 harness 下 GLM/Kimi 未更快）。详见 [`docs/HARNESS_COMPARE_DECISION_20261014.md`](docs/HARNESS_COMPARE_DECISION_20261014.md)。
