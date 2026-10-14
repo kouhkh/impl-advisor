@@ -90,9 +90,78 @@ function formatRuntimeSearch(runtimeSearch) {
   if ((runtimeSearch.candidates || []).length > 12) {
     lines.push(`  … 另有 ${(runtimeSearch.candidates.length - 12)} 条未列出`);
   }
-  lines.push('若 status=multiple：必须先请专家确认唯一候选，不得混合阅读不同运行材料当作同一证据。');
+  if (runtimeSearch.snippetSkipped) {
+    lines.push(`- 未自动读取日志正文：${runtimeSearch.snippetSkipped}`);
+  }
+  if (Array.isArray(runtimeSearch.snippets) && runtimeSearch.snippets.length) {
+    lines.push('- 已读取的候选片段（仅单一候选时；仍可能不是专家要的那次运行）：');
+    runtimeSearch.snippets.forEach((snip) => {
+      lines.push(`  ### ${snip.path}`);
+      lines.push(String(snip.text || '').trim().slice(0, 4000));
+    });
+  }
+  if (runtimeSearch.snippetError) {
+    lines.push(`- 片段读取失败：${runtimeSearch.snippetError}`);
+  }
+  lines.push('若 status=multiple：必须先请专家确认唯一候选，不得读取或混合不同运行材料。');
   lines.push('若 status=none：明确报告缺运行材料，不要编造 run_id。');
+  lines.push('若 status=single：仍应口头确认后再深入；默认仅附带名片，单一候选时可附短 head。');
   return `${lines.join('\n')}\n`;
+}
+
+function toJailRelPath(absOrRel, root) {
+  const value = String(absOrRel || '');
+  const normalizedRoot = String(root || '').replace(/\/$/, '');
+  if (!value) return null;
+  if (!value.startsWith('/')) return value.replace(/^\/+/, '');
+  if (value === normalizedRoot) return '.';
+  if (value.startsWith(`${normalizedRoot}/`)) return value.slice(normalizedRoot.length + 1);
+  return null;
+}
+
+function attachNewestLogSnippet(runtimeSearch, {
+  runtime,
+  runSshOpFn,
+  auditPath,
+  lines = 40,
+  force = false,
+} = {}) {
+  if (!runtimeSearch || runtimeSearch.status !== 'observed') return runtimeSearch;
+  const classification = runtimeSearch.classification || classifyCandidates(runtimeSearch.candidates || []);
+  // Never auto-read log bodies when multiple/none — only a single candidate (or force) may attach a snippet.
+  if (!force && classification.status !== 'single') {
+    return {
+      ...runtimeSearch,
+      classification,
+      snippets: [],
+      snippetSkipped: `classification=${classification.status}; list candidates only`,
+    };
+  }
+  const log = (runtimeSearch.candidates || []).find((item) => /\.log$/i.test(item.path || ''));
+  if (!log) return { ...runtimeSearch, classification };
+  const rel = toJailRelPath(log.path, runtime.root);
+  if (!rel) {
+    return { ...runtimeSearch, classification, snippetError: `cannot map path into jail: ${log.path}` };
+  }
+  try {
+    const result = runSshOpFn(runtime, {
+      op: 'head',
+      args: { path: rel, lines },
+      auditPath,
+    });
+    return {
+      ...runtimeSearch,
+      classification,
+      snippets: [{
+        path: log.path,
+        rel,
+        text: String(result.stdout || '').slice(0, 4000),
+        ms: result.ms,
+      }],
+    };
+  } catch (error) {
+    return { ...runtimeSearch, classification, snippetError: error.message };
+  }
 }
 
 function searchRunCandidates(config, {
@@ -128,7 +197,7 @@ function searchRunCandidates(config, {
     });
     const candidates = parseRunCandidatesSection(result.stdout);
     const classification = classifyCandidates(candidates);
-    return {
+    let payload = {
       status: 'observed',
       mode: 'ssh',
       host: runtime.host,
@@ -140,6 +209,12 @@ function searchRunCandidates(config, {
       load1: result.beforeHealth && result.beforeHealth.load1,
       capturedAt: new Date().toISOString(),
     };
+    payload = attachNewestLogSnippet(payload, {
+      runtime,
+      runSshOpFn,
+      auditPath,
+    });
+    return payload;
   } catch (error) {
     return {
       status: 'error',
@@ -162,4 +237,6 @@ module.exports = {
   classifyCandidates,
   formatRuntimeSearch,
   searchRunCandidates,
+  attachNewestLogSnippet,
+  toJailRelPath,
 };

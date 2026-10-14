@@ -90,10 +90,13 @@ assert.match(result.stdout, /运行材料（只读，export-dir）/);
 assert.match(result.stdout, new RegExp(exportDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 assert.match(result.stdout, /页面事实/);
 assert.match(result.stdout, /https:\/\/example\.test\/job\/1/);
-assert.match(result.stdout, /版本绑定/);
 assert.match(result.stdout, /不得用代码 HEAD 冒充部署版本/);
-assert.match(result.stdout, /运行候选搜索/);
+// 首问也走工作记忆摘要：版本/运行候选以证据卡形式出现，不再重复灌完整版本表。
+assert.match(result.stdout, /顾问工作记忆/);
+assert.match(result.stdout, /version\.bind|run\.list|run\.summary/);
 assert.match(result.stdout, new RegExp(workspace.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+assert.doesNotMatch(result.stdout, /版本绑定（必须区分/);
+assert.doesNotMatch(result.stdout, /运行候选搜索（只列候选/);
 const sessionDir = result.stdout.split('\n')[0];
 assert.ok(fs.existsSync(path.join(sessionDir, 'session.json')));
 assert.ok(fs.existsSync(path.join(sessionDir, 'page-context.json')));

@@ -30,7 +30,35 @@ const text = formatRuntimeSearch({
   candidates,
   classification: classifyCandidates(candidates),
 });
-assert.match(text, /禁止把多次运行拼成一次/);
+assert.match(text, /禁止把多次运行拼成一次|不得读取或混合/);
 assert.match(text, /a\.log/);
+
+const {
+  attachNewestLogSnippet,
+} = require('./runtime-search');
+
+const multiplePayload = {
+  status: 'observed',
+  candidates,
+  classification: classifyCandidates(candidates),
+};
+const skipped = attachNewestLogSnippet(multiplePayload, {
+  runtime: { root: '/opt/planora' },
+  runSshOpFn: () => { throw new Error('should not read snippet for multiple'); },
+});
+assert.equal((skipped.snippets || []).length, 0);
+assert.match(skipped.snippetSkipped || '', /multiple/);
+
+const singlePayload = {
+  status: 'observed',
+  candidates: candidates.slice(0, 1),
+  classification: classifyCandidates(candidates.slice(0, 1)),
+};
+const withSnippet = attachNewestLogSnippet(singlePayload, {
+  runtime: { root: '/opt/planora' },
+  runSshOpFn: () => ({ stdout: 'LOG_LINE_1\n', ms: 1 }),
+});
+assert.equal(withSnippet.snippets.length, 1);
+assert.match(withSnippet.snippets[0].text, /LOG_LINE_1/);
 
 console.log('runtime-search tests passed');

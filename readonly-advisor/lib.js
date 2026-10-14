@@ -351,6 +351,56 @@ function refreshContextNotes(config, { dryRun = false } = {}) {
   return { dryRun: false, files: written, raw, filled };
 }
 
+function workingMemoryEnabled(config) {
+  if (config.workingMemory === false) return false;
+  if (config.workingMemory && config.workingMemory.enabled === false) return false;
+  if (config.memory && config.memory.workingMemory === false) return false;
+  return true;
+}
+
+/**
+ * 首问前：把 versions / runtimeSearch 收成工作记忆摘要（尚未落盘会话）。
+ * 这样首轮也不把整段版本表/候选原文重复灌进 prompt。
+ */
+function seedWorkingMemoryBrief(config, {
+  question,
+  versions = null,
+  runtimeSearch = null,
+} = {}) {
+  if (!workingMemoryEnabled(config)) return null;
+  const {
+    createWorkingMemory,
+    ingestCards,
+    runCandidateFromSearch,
+    decideAllowedOps,
+    evaluateStop,
+    formatWorkingMemory,
+  } = require('./working-memory');
+  const { cardsFromAskContext } = require('./evidence-gateway');
+  let memory = createWorkingMemory({
+    question,
+    maxTurns: (config.memory && config.memory.workingTurns)
+      || (config.workingMemory && config.workingMemory.maxTurns),
+    maxCards: (config.memory && config.memory.maxCards)
+      || (config.workingMemory && config.workingMemory.maxCards),
+    structuredRuntime: config.structuredRuntime && config.structuredRuntime.enabled,
+  });
+  if (runtimeSearch) {
+    memory = {
+      ...memory,
+      runCandidate: runCandidateFromSearch(runtimeSearch),
+    };
+  }
+  const ingested = ingestCards(memory, cardsFromAskContext({ versions, runtimeSearch }));
+  memory = ingested.memory;
+  memory.allowedNextOps = decideAllowedOps(memory);
+  memory.stopReason = evaluateStop(memory, { addedCardCount: ingested.added });
+  const budget = (config.workingMemory && config.workingMemory.briefBudget)
+    || (config.memory && config.memory.briefBudget)
+    || undefined;
+  return formatWorkingMemory(memory, { budget });
+}
+
 function buildPrompt({
   config,
   question,
@@ -373,14 +423,15 @@ function buildPrompt({
   const retrieval = formatRetrieval(config);
   const runtime = formatRuntime(config);
   const contextNotes = formatContextNotes(config);
-  const versionBlock = formatVersionBinding(versions);
-  const runtimeBlock = formatRuntimeSearch(runtimeSearch);
+  // 有工作记忆摘要时：版本/运行候选只保留卡片指针，避免与 brief 双重灌入。
+  const compact = Boolean(workingMemoryBrief) && workingMemoryEnabled(config);
+  const versionBlock = compact ? '' : formatVersionBinding(versions);
+  const runtimeBlock = compact ? '' : formatRuntimeSearch(runtimeSearch);
   const page = formatPageContext(pageContext);
   const task = config.task || '未指定业务任务';
   const envLine = config.environment ? `环境：${config.environment}\n` : '';
-  const base = `你是项目的只读 coding agent 顾问。\n\n项目：${config.project || '未命名项目'}\n${envLine}目标任务：${task}\n工作区：${config.workspace}\n${paths ? `重要路径：\n${paths}\n` : ''}${taskContext ? `业务任务资料（优先读取）：\n${taskContext}\n` : ''}${terms ? `项目术语：\n${terms}\n` : ''}${retrieval ? `${retrieval}\n` : ''}${runtime}${versionBlock ? `\n${versionBlock}\n` : ''}${runtimeBlock ? `\n${runtimeBlock}\n` : ''}${contextNotes ? `\n${contextNotes}\n` : ''}${page ? `\n${page}\n` : ''}\n硬性要求：\n1. 只读检查，不修改文件、不提交、不部署、不写业务数据。\n2. 只把实际读取到的内容当作事实；把代码推测和缺失材料分开。\n3. 回答中列出实际读取的文件路径、关键符号或命令。\n4. 不要输出凭据、环境变量值、密钥或隐私数据。\n5. 如果无法还原某次实际运行，要明确说明缺少什么。\n6. 必须区分代码工作区版本与部署/运行版本；不一致或未知时不得用代码 HEAD 冒充部署。\n7. 多个运行候选时必须先追问确认，不得把不同运行材料拼成一次事实。\n8. 优先使用工作记忆与证据卡片指针；完整历史仅在磁盘，不得假设已读过未注入的 transcript。\n\n专家问题：\n${question}\n`;
-  // 追问默认只带工作记忆摘要（M4）；完整 transcript 仅落盘。
-  // proposal 等少数场景仍可显式传入 transcript。
+  const base = `你是项目的只读 coding agent 顾问。\n\n项目：${config.project || '未命名项目'}\n${envLine}目标任务：${task}\n工作区：${config.workspace}\n${paths ? `重要路径：\n${paths}\n` : ''}${taskContext ? `业务任务资料（优先读取）：\n${taskContext}\n` : ''}${terms ? `项目术语：\n${terms}\n` : ''}${retrieval ? `${retrieval}\n` : ''}${runtime}${versionBlock ? `\n${versionBlock}\n` : ''}${runtimeBlock ? `\n${runtimeBlock}\n` : ''}${contextNotes ? `\n${contextNotes}\n` : ''}${page ? `\n${page}\n` : ''}\n硬性要求：\n1. 只读检查，不修改文件、不提交、不部署、不写业务数据。\n2. 只把实际读取到的内容当作事实；把代码推测和缺失材料分开。\n3. 回答中列出实际读取的文件路径、关键符号或命令。\n4. 不要输出凭据、环境变量值、密钥或隐私数据。\n5. 如果无法还原某次实际运行，要明确说明缺少什么。\n6. 必须区分代码工作区版本与部署/运行版本；不一致或未知时不得用代码 HEAD 冒充部署版本。\n7. 多个运行候选时必须先追问确认，不得把不同运行材料拼成一次事实。\n8. 优先使用工作记忆与证据卡片指针；完整历史仅在磁盘，不得假设已读过未注入的 transcript。\n9. 允许的网关操作见工作记忆「允许下一步」；连续无新证据或触达停搜原因时，返回「当前无法确认」并列出缺口。\n\n专家问题：\n${question}\n`;
+  // 默认只带工作记忆摘要；完整 transcript 仅落盘。proposal 可显式传 transcript。
   const history = workingMemoryBrief
     ? `\n${workingMemoryBrief}\n`
     : (transcript ? `\n已有专家会话记录：\n${transcript}\n` : '');
@@ -391,24 +442,13 @@ function buildPrompt({
 }
 
 function runDsh(config, prompt) {
-  const isJsLauncher = config.dshBin.endsWith('.js');
-  if (isJsLauncher && !fs.existsSync(config.dshBin)) throw new Error(`DSH binary does not exist: ${config.dshBin}`);
-  if (config.dryRun) return `[dry-run]\n${prompt}`;
-  const env = { ...process.env, DSH_HOME: config.dshHome };
-  const command = isJsLauncher ? process.execPath : config.dshBin;
-  const commandArgs = isJsLauncher ? [config.dshBin, '--profile', 'headless', prompt] : ['--profile', 'headless', prompt];
-  const result = spawnSync(command, commandArgs, {
-    cwd: config.workspace,
-    env,
-    encoding: 'utf8',
-    maxBuffer: 8 * 1024 * 1024,
-  });
-  if (result.error) throw result.error;
-  if (result.status !== 0) {
-    const detail = (result.stderr || result.stdout || '').trim().slice(-4000);
-    throw new Error(`DSH failed with status ${result.status}${detail ? `: ${detail}` : ''}`);
-  }
-  return (result.stdout || '').trim();
+  const { runDsh: runDshRunner } = require('./runners');
+  return runDshRunner(config, prompt);
+}
+
+function runHarness(config, prompt) {
+  const { runHarness: run } = require('./runners');
+  return run(config, prompt);
 }
 
 function appendTranscript(file, role, text) {
@@ -444,6 +484,10 @@ function createSession(config, question, answer, pageContext, versions, runtimeS
     pageContext: pageContext || null,
     readOnly: true,
     modelPolicy: { default: 'flash', escalation: 'manual-or-checker' },
+    runner: (() => {
+      const { describeRunner } = require('./runners');
+      return describeRunner(config);
+    })(),
     dshProfile: 'headless',
     configPath: config.__configPath,
     notesDir: config.notesDir,
@@ -463,7 +507,7 @@ function createSession(config, question, answer, pageContext, versions, runtimeS
   const runStatus = runtimeSearch && (runtimeSearch.classification
     ? runtimeSearch.classification.status
     : runtimeSearch.status);
-  fs.writeFileSync(path.join(sessionDir, 'transcript.md'), `# 顾问会话 ${sessionId}\n\n- 项目：${metadata.project || ''}\n- 任务：${metadata.task || ''}\n- 代码提交：${facts.commit || 'unknown'}\n- 部署引用：${deployLine}\n- 版本比较：${cmp}\n- 运行候选：${runStatus || 'n/a'}\n- 只读：是\n`, 'utf8');
+  fs.writeFileSync(path.join(sessionDir, 'transcript.md'), `# 顾问会话 ${sessionId}\n\n- 项目：${metadata.project || ''}\n- 任务：${metadata.task || ''}\n- runner：${(metadata.runner && metadata.runner.kind) || 'dsh'}\n- 代码提交：${facts.commit || 'unknown'}\n- 部署引用：${deployLine}\n- 版本比较：${cmp}\n- 运行候选：${runStatus || 'n/a'}\n- 只读：是\n`, 'utf8');
   appendTranscript(path.join(sessionDir, 'transcript.md'), 'expert', question);
   appendTranscript(path.join(sessionDir, 'transcript.md'), 'agent', answer);
   const { updateWorkingMemory } = require('./working-memory');
@@ -477,6 +521,21 @@ function createSession(config, question, answer, pageContext, versions, runtimeS
     maxCards: config.memory && config.memory.maxCards,
     structuredRuntime: config.structuredRuntime && config.structuredRuntime.enabled,
   });
+  try {
+    const { recordRunMemoryFromSession } = require('./memory');
+    const recorded = recordRunMemoryFromSession(config, {
+      sessionId,
+      question,
+      versions,
+      runtimeSearch,
+    });
+    if (recorded) {
+      metadata.runMemory = { runKey: recorded.runKey, md: recorded.md };
+      writeJson(path.join(sessionDir, 'session.json'), metadata);
+    }
+  } catch {
+    // run-memory 失败不得拖垮会话落盘
+  }
   return { sessionDir, metadata, answer, versions, runtimeSearch };
 }
 
@@ -661,10 +720,16 @@ function askQuestion(config, {
     includeRuntimeCandidates,
     dryRun,
   });
-  const answer = runDsh(runtimeConfig, buildPrompt({
+  const workingMemoryBrief = seedWorkingMemoryBrief(runtimeConfig, {
+    question,
+    versions,
+    runtimeSearch,
+  });
+  const answer = runHarness(runtimeConfig, buildPrompt({
     config: runtimeConfig,
     question,
     mode: 'answer',
+    workingMemoryBrief,
     pageContext,
     versions,
     runtimeSearch,
@@ -709,7 +774,7 @@ function followupQuestion(sessionDirOrMeta, {
       writeJson(path.join(sessionDir, 'runtime-candidates.json'), runtimeSearch);
     }
   }
-  const answer = runDsh(config, buildPrompt({
+  const answer = runHarness(config, buildPrompt({
     config,
     question,
     mode: 'answer',
@@ -760,6 +825,8 @@ function initProject({
   runtime = null,
   dshBin,
   dshHome,
+  runner = 'dsh',
+  opencodeBin = null,
 }) {
   const resolvedWorkspace = path.resolve(workspace);
   const out = path.resolve(output || defaultConfigPath(project));
@@ -788,8 +855,10 @@ function initProject({
     recordDir: resolvedRecordDir,
     notesDir: resolvedNotesDir,
     runtime: runtimeConfig.mode === 'none' ? null : runtimeConfig,
+    runner: runner || 'dsh',
     dshBin: dshBin || defaultDshBin(),
     dshHome: dshHome || process.env.DSH_HOME || path.join(os.homedir(), '.dsh'),
+    opencodeBin: opencodeBin || process.env.OPENCODE_BIN || null,
     importantPaths: {},
     taskContextPaths: [],
     terms: {},
@@ -819,7 +888,10 @@ module.exports = {
   defaultDshBin,
   loadConfig,
   buildPrompt,
+  workingMemoryEnabled,
+  seedWorkingMemoryBrief,
   runDsh,
+  runHarness,
   createSession,
   loadSession,
   updateSession,

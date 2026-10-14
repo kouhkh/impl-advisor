@@ -6,7 +6,7 @@ const path = require('node:path');
 const {
   loadConfig,
   buildPrompt,
-  runDsh,
+  runHarness,
   loadSession,
   updateSession,
   readPageContextArg,
@@ -23,7 +23,7 @@ const {
 const { runSshOp, defaultAuditPath } = require('./ssh-readonly');
 
 function usage(exitCode = 0) {
-  const text = `\nReadonly Advisor (DSH)\n\nCommands:\n  init      create a minimal project config outside the target workspace\n  ask       ask a read-only business/task question and record the session\n  followup  continue a recorded session\n  notes     refresh or show external Context Notes\n  versions  capture code vs deploy version binding\n  runtime-search  list guarded runtime candidate files\n  records   list/get structured runtime records (fixture/sql contract)\n  ssh       guarded readonly SSH ops\n  propose   create a developer-reviewable modification proposal\n  review    record a developer decision on a proposal\n\nExamples:\n  node readonly-advisor/cli.js versions --config ~/.impl-advisor/planora/project.json\n  node readonly-advisor/cli.js runtime-search --config ~/.impl-advisor/planora/project.json --question "这次运行日志在哪"\n  node readonly-advisor/cli.js records --config <cfg> --op list --collection jobs --query "demo"\n  node readonly-advisor/cli.js records --config <cfg> --op get --collection jobs --id job-1\n  node readonly-advisor/cli.js ask --config ~/.impl-advisor/planora/project.json \\\n    --question "这次改写对应哪份运行材料？"\n  # ask：部署快照默认开；运行相关问题会一次 SSH 拉候选。可用 --no-deploy-snapshot / --no-runtime-candidates\n`;
+  const text = `\nReadonly Advisor (harness-neutral：证据网关 + 工作记忆；默认 runner=DSH)\n\nCommands:\n  init      create a minimal project config outside the target workspace\n  ask       ask a read-only business/task question and record the session\n  followup  continue a recorded session (injects working-memory brief only)\n  notes     refresh or show external Context Notes\n  memory    generate/show project|task|run memory (外置，不写目标仓)\n  evidence  run one evidence-gateway op (code.search|code.read|run.*|version.bind)\n  versions  capture code vs deploy version binding\n  runtime-search  list guarded runtime candidate files\n  records   list/get structured runtime records (fixture/sql contract)\n  ssh       guarded readonly SSH ops\n  propose   create a developer-reviewable modification proposal\n  review    record a developer decision on a proposal\n\nExamples:\n  node readonly-advisor/cli.js evidence --config <cfg> --op code.search --query maxMediaDocumentPages\n  node readonly-advisor/cli.js memory --config <cfg> --kind run --from-session <sessionDir>\n  # OpenCode 对照：project.json 设 "runner":"opencode"（同一工作记忆，只换 harness）\n  node readonly-advisor/cli.js ask --config ~/.impl-advisor/planora/project.json \\\n    --question "这次改写对应哪份运行材料？"\n  # ask/followup：默认注入 working-memory 摘要；完整 transcript 只落盘\n`;
   process.stdout.write(text);
   process.exit(exitCode);
 }
@@ -92,12 +92,84 @@ function commandInit(args) {
     runtime,
     dshBin: args['dsh-bin'],
     dshHome: args['dsh-home'],
+    runner: args.runner || 'dsh',
+    opencodeBin: args['opencode-bin'] || null,
   });
   process.stdout.write(`created ${result.configPath}\n`);
 }
 
-function commandAsk(args) {
+function commandMemory(args) {
   const config = loadConfig(required(args, 'config'));
+  const {
+    generateProjectMemory,
+    generateTaskMemory,
+    generateRunMemory,
+    recordRunMemoryFromSession,
+    memoryRoot,
+  } = require('./memory');
+  const kind = args.kind || args._[1] || 'project';
+  if (kind === 'project') {
+    const result = generateProjectMemory(config, { revision: args.revision || null });
+    process.stdout.write(`${result.md}\n`);
+    return;
+  }
+  if (kind === 'task') {
+    const result = generateTaskMemory(config, {
+      task: args.task || null,
+      question: args.question || null,
+      revision: args.revision || null,
+    });
+    process.stdout.write(`${result.md}\n`);
+    return;
+  }
+  if (kind === 'run') {
+    if (args['from-session']) {
+      const { sessionDir, metadata } = loadSession(args['from-session']);
+      const recorded = recordRunMemoryFromSession(config, {
+        sessionId: metadata.sessionId,
+        question: metadata.question,
+        versions: metadata.versions || (fs.existsSync(path.join(sessionDir, 'versions.json'))
+          ? JSON.parse(fs.readFileSync(path.join(sessionDir, 'versions.json'), 'utf8'))
+          : null),
+        runtimeSearch: metadata.runtimeSearch || (fs.existsSync(path.join(sessionDir, 'runtime-candidates.json'))
+          ? JSON.parse(fs.readFileSync(path.join(sessionDir, 'runtime-candidates.json'), 'utf8'))
+          : null),
+        selectedCandidate: args.path || null,
+      });
+      if (!recorded) {
+        process.stdout.write('(no run-memory recorded: missing versions/runtimeSearch)\n');
+        return;
+      }
+      process.stdout.write(`${recorded.md}\n`);
+      return;
+    }
+    const result = generateRunMemory(config, {
+      runKey: args['run-key'] || null,
+      question: args.question || null,
+      selectedCandidate: args.path || null,
+      note: args.note || null,
+    });
+    process.stdout.write(`${result.md}\n`);
+    return;
+  }
+  if (kind === 'root') {
+    process.stdout.write(`${memoryRoot(config)}\n`);
+    return;
+  }
+  throw new Error('memory --kind must be project|task|run|root');
+}
+
+function applyRunnerOverrides(config, args) {
+  if (args.runner && args.runner !== true) config.runner = args.runner;
+  if (args['opencode-bin'] && args['opencode-bin'] !== true) {
+    config.opencodeBin = args['opencode-bin'];
+  }
+  if (args['dsh-bin'] && args['dsh-bin'] !== true) config.dshBin = args['dsh-bin'];
+  return config;
+}
+
+function commandAsk(args) {
+  const config = applyRunnerOverrides(loadConfig(required(args, 'config')), args);
   const pageContext = readPageContextArg(args);
   const result = askQuestion(config, {
     question: required(args, 'question'),
@@ -160,7 +232,7 @@ function commandPropose(args) {
   config.dryRun = Boolean(args['dry-run']);
   const transcript = fs.readFileSync(path.join(sessionDir, 'transcript.md'), 'utf8');
   const question = args.question || metadata.question;
-  const proposal = runDsh(config, buildPrompt({
+  const proposal = runHarness(config, buildPrompt({
     config,
     question,
     mode: 'proposal',
@@ -245,6 +317,30 @@ function commandRecords(args) {
   process.stdout.write(`${JSON.stringify(card, null, 2)}\n`);
 }
 
+function commandEvidence(args) {
+  const config = loadConfig(required(args, 'config'));
+  const { executeOp, GATEWAY_OPS } = require('./evidence-gateway');
+  const op = required(args, 'op');
+  if (!GATEWAY_OPS.includes(op)) {
+    throw new Error(`evidence --op must be one of: ${GATEWAY_OPS.join(', ')}`);
+  }
+  const card = executeOp(op, config, {
+    query: args.query,
+    file: args.file,
+    startLine: args['start-line'] ? Number(args['start-line']) : undefined,
+    maxChars: args['max-chars'] ? Number(args['max-chars']) : undefined,
+    question: args.question || '',
+    candidatePath: args.path || args['candidate-path'],
+    lines: args.lines ? Number(args.lines) : undefined,
+    confirmed: Boolean(args.confirmed),
+    includeDeploySnapshot: !args['no-deploy-snapshot'],
+    collection: args.collection,
+    id: args.id,
+    limit: args.limit ? Number(args.limit) : undefined,
+  });
+  process.stdout.write(`${JSON.stringify(card, null, 2)}\n`);
+}
+
 function commandSsh(args) {
   const config = loadConfig(required(args, 'config'));
   if (!config.runtime || config.runtime.mode !== 'ssh') {
@@ -286,9 +382,11 @@ function main() {
     if (command === 'ask') return commandAsk(args);
     if (command === 'followup') return commandFollowup(args);
     if (command === 'notes') return commandNotes(args);
+    if (command === 'memory') return commandMemory(args);
     if (command === 'versions') return commandVersions(args);
     if (command === 'runtime-search') return commandRuntimeSearch(args);
     if (command === 'records') return commandRecords(args);
+    if (command === 'evidence') return commandEvidence(args);
     if (command === 'ssh') return commandSsh(args);
     if (command === 'propose') return commandPropose(args);
     if (command === 'review') return commandReview(args);
