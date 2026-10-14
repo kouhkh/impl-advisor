@@ -14,6 +14,7 @@
     "test:structured-runtime": "node readonly-advisor/structured-runtime-test.js",
     "test:memory": "node readonly-advisor/memory-test.js",
     "test:runners": "node readonly-advisor/runners-test.js",
+    "compare:harness": "node scripts/compare-harness.mjs",
     "advisor": "node readonly-advisor/cli.js",
     "runner": "node runner/server.js",
     "e2e:fixture": "node fixtures/serve-e2e.js"

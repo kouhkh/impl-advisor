@@ -81,7 +81,15 @@ node readonly-advisor/cli.js ask --config <cfg> --question "..."
 node readonly-advisor/cli.js ask --config <cfg> --runner opencode --question "..."
 ```
 
-`project.json` 字段：`runner`（`dsh`|`opencode`）、`opencodeBin` / `OPENCODE_BIN`、`opencodeArgs`（默认 `["run"]`）。
+`project.json` 字段：`runner`（`dsh`|`opencode`|`cursor`）、`opencodeBin` / `OPENCODE_BIN`、`opencodeModel`、`opencodeAllowTools`（默认 false：对照时禁止工具空转）、`cursorBin`。
+
+批量对照（冻结同一 brief）：
+
+```bash
+node scripts/compare-harness.mjs \
+  --config <cfg> --question-file <q.md> --out <dir> \
+  --runners dsh,opencode,cursor
+```
 
 ## 7. 明确不做
 

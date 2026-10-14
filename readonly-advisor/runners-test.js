@@ -24,6 +24,13 @@ const dryOc = runHarness({
 assert.match(dryOc, /\[dry-run:opencode\]/);
 assert.match(dryOc, /same-brief/);
 
+const dryCursor = runHarness({
+  runner: 'cursor',
+  dryRun: true,
+  workspace: process.cwd(),
+}, 'cursor-brief');
+assert.match(dryCursor, /\[dry-run:cursor\]/);
+
 const desc = describeRunner({ runner: 'opencode', opencodeBin: '/usr/local/bin/opencode' });
 assert.equal(desc.kind, 'opencode');
 assert.equal(desc.bin, '/usr/local/bin/opencode');
