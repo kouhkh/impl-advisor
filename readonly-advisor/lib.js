@@ -154,6 +154,10 @@ function loadConfig(file) {
     throw new Error(`notesDir must stay outside target workspace: ${config.notesDir}`);
   }
   config.runtime = normalizeRuntime(config.runtime, config.workspace);
+  const { normalizeStructuredRuntime } = require('./structured-runtime');
+  config.structuredRuntime = normalizeStructuredRuntime(config.structuredRuntime, {
+    workspace: config.workspace,
+  });
   config.environment = config.environment || null;
   config.dshBin = normalizeExecutable(config.dshBin);
   config.dshHome = config.dshHome || process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
@@ -178,20 +182,21 @@ function formatRetrieval(config) {
 }
 
 function formatRuntime(config) {
+  const { formatStructuredRuntime } = require('./structured-runtime');
+  const structuredBlock = formatStructuredRuntime(config.structuredRuntime);
   const runtime = config.runtime;
+  let fileBlock = '';
   if (!runtime || runtime.mode === 'none') {
-    return '运行材料：本次未配置运行入口。只能解释实现，不能声称还原某次实际运行。\n';
-  }
-  if (runtime.mode === 'export-dir') {
+    fileBlock = '运行材料：本次未配置运行文件入口。只能解释实现，不能声称还原某次实际运行。\n';
+  } else if (runtime.mode === 'export-dir') {
     const notes = runtime.notes ? `说明：${runtime.notes}\n` : '';
-    return `运行材料（只读，export-dir）：\n目录：${runtime.exportDir}\n${notes}规则：\n1. 只读浏览该目录下的导出材料；\n2. 没有唯一 run_id 时先列出候选，再追问专家，不要合并不同运行；\n3. 读不到部署版本就记为未知，不能用代码 HEAD 冒充。\n`;
-  }
-  if (runtime.mode === 'ssh') {
+    fileBlock = `运行材料（只读，export-dir）：\n目录：${runtime.exportDir}\n${notes}规则：\n1. 只读浏览该目录下的导出材料；\n2. 没有唯一 run_id 时先列出候选，再追问专家，不要合并不同运行；\n3. 读不到部署版本就记为未知，不能用代码 HEAD 冒充。\n`;
+  } else if (runtime.mode === 'ssh') {
     const { formatSshOpsHelp } = require('./ssh-readonly');
     const notes = runtime.notes ? `说明：${runtime.notes}\n` : '';
-    return `运行材料（只读，ssh，P1）：\n${formatSshOpsHelp(runtime)}\n${notes}规则：\n1. 禁止自由 shell；只能通过顾问 ssh 护栏操作（health/ls/head/find-names）；\n2. 远端资源紧张（load/mem 过高）时操作会失败，应报告缺失而不是重试轰炸；\n3. 没有唯一 run_id 时先列候选再追问；读不到部署版本记为未知。\n`;
+    fileBlock = `运行材料（只读，ssh，P1）：\n${formatSshOpsHelp(runtime)}\n${notes}规则：\n1. 禁止自由 shell；只能通过顾问 ssh 护栏操作（health/ls/head/find-names）；\n2. 远端资源紧张（load/mem 过高）时操作会失败，应报告缺失而不是重试轰炸；\n3. 没有唯一 run_id 时先列候选再追问；读不到部署版本记为未知。\n`;
   }
-  return '';
+  return `${fileBlock}${structuredBlock ? `\n${structuredBlock}` : ''}`;
 }
 
 function formatPageContext(pageContext) {
@@ -470,6 +475,7 @@ function createSession(config, question, answer, pageContext, versions, runtimeS
     runtimeSearch,
     maxTurns: config.memory && config.memory.workingTurns,
     maxCards: config.memory && config.memory.maxCards,
+    structuredRuntime: config.structuredRuntime && config.structuredRuntime.enabled,
   });
   return { sessionDir, metadata, answer, versions, runtimeSearch };
 }
@@ -726,6 +732,7 @@ function followupQuestion(sessionDirOrMeta, {
     runtimeSearch,
     maxTurns: config.memory && config.memory.workingTurns,
     maxCards: config.memory && config.memory.maxCards,
+    structuredRuntime: config.structuredRuntime && config.structuredRuntime.enabled,
   });
   updateSession(sessionDir, {
     turns: turn,

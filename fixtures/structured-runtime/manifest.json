@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "readonly-advisor-structured-runtime-fixture/1",
+  "notes": "Neutral protocol fixture only. Do not use as Planora Q3 ground truth or leak experiment answers.",
+  "collections": {
+    "catalog_items": {
+      "description": "Demo catalog rows for list/get protocol tests",
+      "listFields": ["id", "sku", "status", "updatedAt"],
+      "getFields": ["id", "sku", "status", "updatedAt", "title", "body", "note"],
+      "records": [
+        {
+          "id": "item-alpha-001",
+          "fields": {
+            "sku": "FOO-100",
+            "status": "active",
+            "updatedAt": "2026-01-02T00:00:00.000Z",
+            "title": "Alpha widget",
+            "body": "foo maps to bar in this demo row",
+            "note": "protocol sample; unrelated to any product bug"
+          }
+        },
+        {
+          "id": "item-beta-002",
+          "fields": {
+            "sku": "BAZ-200",
+            "status": "archived",
+            "updatedAt": "2026-01-01T00:00:00.000Z",
+            "title": "Beta widget",
+            "body": "unrelated second row",
+            "note": "filler"
+          }
+        }
+      ]
+    }
+  }
+}

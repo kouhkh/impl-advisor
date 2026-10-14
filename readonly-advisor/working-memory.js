@@ -70,8 +70,9 @@ function createWorkingMemory({
   question = '',
   maxTurns = DEFAULT_MAX_TURNS,
   maxCards = DEFAULT_MAX_CARDS,
+  structuredRuntime = false,
 } = {}) {
-  return {
+  const memory = {
     schemaVersion: WORKING_MEMORY_SCHEMA,
     sessionId: sessionId || null,
     question: trimText(question, DEFAULT_QUESTION_BUDGET),
@@ -79,7 +80,7 @@ function createWorkingMemory({
     evidenceCards: [],
     runCandidate: emptyRunCandidate(),
     unresolved: [],
-    allowedNextOps: ['code.search', 'code.read', 'run.list', 'version.bind'],
+    allowedNextOps: [],
     stopReason: null,
     turns: [],
     counters: {
@@ -94,9 +95,12 @@ function createWorkingMemory({
       toolCallLimit: DEFAULT_TOOL_CALL_LIMIT,
       fullTranscript: 'disk-only',
       evidencePromotion: 'requires-confirmation',
+      structuredRuntime: Boolean(structuredRuntime),
     },
     updatedAt: new Date().toISOString(),
   };
+  memory.allowedNextOps = decideAllowedOps(memory);
+  return memory;
 }
 
 function loadWorkingMemory(sessionDir) {
@@ -178,6 +182,11 @@ function decideAllowedOps(memory) {
   } else {
     ops.add('run.list');
     ops.add('run.summary');
+  }
+  // 结构化运行记录与文件候选正交：多文件候选未确认时仍可 list/get 记录（先拿名片）。
+  if (memory.policy && memory.policy.structuredRuntime) {
+    ops.add('run.record_list');
+    ops.add('run.record_get');
   }
   return [...ops];
 }
@@ -276,6 +285,7 @@ function updateWorkingMemory(sessionDir, {
   cards = null,
   maxTurns = null,
   maxCards = null,
+  structuredRuntime = null,
 } = {}) {
   ensureDir(sessionDir);
   const previous = loadWorkingMemory(sessionDir) || createWorkingMemory({
@@ -283,9 +293,11 @@ function updateWorkingMemory(sessionDir, {
     question,
     maxTurns: maxTurns || DEFAULT_MAX_TURNS,
     maxCards: maxCards || DEFAULT_MAX_CARDS,
+    structuredRuntime: Boolean(structuredRuntime),
   });
   if (maxTurns) previous.policy.maxTurns = Math.max(1, Math.min(4, Number(maxTurns)));
   if (maxCards) previous.policy.maxCards = Math.max(4, Math.min(24, Number(maxCards)));
+  if (structuredRuntime != null) previous.policy.structuredRuntime = Boolean(structuredRuntime);
 
   const { cardsFromAskContext } = require('./evidence-gateway');
   const autoCards = cards || cardsFromAskContext({ versions, runtimeSearch });

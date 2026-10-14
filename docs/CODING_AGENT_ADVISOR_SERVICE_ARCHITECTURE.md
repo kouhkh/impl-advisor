@@ -1,8 +1,9 @@
 # Coding Agent 只读顾问：模块与部署架构
 
-> 状态：模块边界修订版，2026-10-12  
+> 状态：模块边界修订版，2026-10-12；**2026-10-13 按数据面深入调研修订三面证据**  
 > 首个试点：Planora「技术规格书语气改写」  
-> 范围：只读顾问、页面接入、代码/运行材料读取、外部会话和查询笔记；不做自动改代码和发布。
+> 范围：只读顾问、页面接入、代码/运行文件/项目数据读取、外部会话和查询笔记；不做自动改代码和发布。  
+> 数据面调研：[`CODING_AGENT_PROJECT_DATA_PLANE_RESEARCH.md`](./CODING_AGENT_PROJECT_DATA_PLANE_RESEARCH.md)。
 
 ## 1. 先区分四种概念
 
@@ -39,7 +40,8 @@
 ┌─────────────────────┐ ┌─────────────────────┐
 │ 证据访问面           │ │ 推理面              │
 │ Code Access          │ │ DSH Adapter         │
-│ Runtime Access       │ │ Context Notes       │
+│ Runtime File Access  │ │ Context Notes       │
+│ Project Data Access  │ │                     │
 │ Generic Tools        │ │                     │
 └──────────┬──────────┘ └──────────┬──────────┘
            │                       │
@@ -77,7 +79,7 @@ Runner 是把各模块接起来的薄进程，不是业务 App 的插件，也�
 | Request Receiver | 接收 PinAsk 或 JSON 请求 |
 | Project Binding | 绑定项目、环境和外部工作区；不从页面猜 `project`/`environment` |
 | Session Controller | 创建会话、处理追问、加载历史 |
-| Access Planner | 决定先查代码、运行材料还是页面已有线索 |
+| Access Planner | 决定先查代码、运行文件、项目数据还是页面已有线索 |
 | Evidence Checker | 检查路径、版本、环境和运行候选是否冲突 |
 | Answer Composer | 把 DSH 输出整理成结论、证据、推导和缺失材料 |
 | Response Writer | 把回答和追问结果返回给 PinAsk/CLI |
@@ -87,14 +89,16 @@ Runner 是把各模块接起来的薄进程，不是业务 App 的插件，也�
 
 ### 3.3 证据访问模块：Evidence Access
 
-这是一个模块，内部包含两种不同的读取器：
+这是一个模块，内部包含**三种**不同的读取器（2026-10-13 调研纠正：原「Runtime Access」把文件与业务库混为一谈，已被 Planora Q123 证伪）：
 
 | 组件 | 读取内容 | 首轮入口 |
 |---|---|---|
 | Code Access | 源码、配置、目录、Git 版本 | Planora 本地目录或 Git 只读 |
-| Runtime Access | 日志、结果、中间产物、运行记录 | Planora 固定导出目录；之后可用 SSH/只读命令 |
+| Runtime File Access | 日志、导出目录、release 树、文件型产物 | export-dir；SSH `ls/head/find` |
+| Project Data Access | 元数据、文档、策略/模板、任务、draft 等结构化对象 | 命名只读查询 / 只读视图 / BFF（**默认禁止模型自由 SQL**） |
 
-两者都只读。没有运行材料时，只能解释实现，不能声称还原某次实际运行。
+三者都只读，且**互不替代**：有代码无文件时只能做机制解释；有代码+文件仍可能缺实例事实（模板名、draft 字面、job 行）。  
+数据面调研：[`CODING_AGENT_PROJECT_DATA_PLANE_RESEARCH.md`](./CODING_AGENT_PROJECT_DATA_PLANE_RESEARCH.md)。
 
 ### 3.4 工具执行模块：Generic Tool Executor
 
@@ -105,7 +109,8 @@ Runner 是把各模块接起来的薄进程，不是业务 App 的插件，也�
 | 目录和文件 | 列目录、读文本 | P0，优先复用 DSH |
 | 搜索 | 受限文本搜索、关键词搜索 | P0，优先复用 DSH |
 | 版本事实 | Git commit、分支、工作区状态 | P0 |
-| 运行搜索 | 按时间、现象、关键词查材料 | P0/P1，取决于导出材料 |
+| 运行文件搜索 | 按时间、现象、关键词查日志/导出 | P0/P1，取决于导出材料 |
+| 项目数据查询 | 命名只读查询 / list·get（非自由 SQL） | P1；实例题常必需，见数据面调研 |
 | 结构检索 | LSP、调用图、外部代码索引 | P1/P2，失败信号触发 |
 
 工具权限由执行环境限制，不能只靠提示词要求 Agent 不写文件。

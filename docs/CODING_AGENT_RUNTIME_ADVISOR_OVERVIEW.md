@@ -1,27 +1,31 @@
 # 代码库与运行顾问：概要设计
 
-> 状态：模块边界修订版，2026-10-12  
+> 状态：模块边界修订版，2026-10-12；**2026-10-13 按数据面深入调研修订三面证据**  
 > 首个试点：Planora「技术规格书语气改写」  
-> 详细模块与部署见 [`CODING_AGENT_ADVISOR_SERVICE_ARCHITECTURE.md`](./CODING_AGENT_ADVISOR_SERVICE_ARCHITECTURE.md)。
+> 详细模块与部署见 [`CODING_AGENT_ADVISOR_SERVICE_ARCHITECTURE.md`](./CODING_AGENT_ADVISOR_SERVICE_ARCHITECTURE.md)。  
+> 数据面深入调研：[`CODING_AGENT_PROJECT_DATA_PLANE_RESEARCH.md`](./CODING_AGENT_PROJECT_DATA_PLANE_RESEARCH.md)。
 
 ## 1. 设计判断
 
-1. 项目方只提供代码和运行材料的只读访问，不向目标代码库添加提示词、导航、索引或技能。
-2. 系统由一个薄 Runner 编排 PinAsk、代码/运行读取、DSH 和外部会话记录。
+1. 项目方提供代码、运行文件，并按题提供项目只读数据入口；不向目标代码库添加提示词、导航、索引或技能。
+2. 系统由一个薄 Runner 编排 PinAsk、代码/文件/数据读取、DSH 和外部会话记录。
 3. DSH、证据检查和回答组织是 Runner 内的组件，不是互相独立的产品层。
 4. 顾问在目标代码库之外生成少量查询笔记；首问没有笔记时仍能使用通用搜索。
 5. Planora P0 在 Mac 本地运行；项目网络受限时，才把同一个 Runner 放到项目方网络内。
 
 ## 2. 要解决的问题
 
-专家对着页面结果问“为什么会这样”。顾问需要同时读取两类材料：
+专家对着页面结果问“为什么会这样”。顾问需要同时读取**三类**材料（早期调研误把后两类收成「运行材料」一块，已被 Planora Q123 证伪）：
 
 | 问题 | 需要的材料 | 能回答到哪里 |
 |---|---|---|
 | 实现解释 | 源码、配置、代码版本 | 哪个模块、规则或调用链导致行为 |
-| 运行解释 | 运行输入、结果、中间产物、日志、运行版本 | 这一次实际使用了什么材料和流程 |
+| 运行文件解释 | 日志、导出目录、release 树、运行版本绑定 | 文件型运行痕迹与部署树事实 |
+| 项目数据解释 | DB/API 中的元数据、文档、策略/模板、任务、draft 等 | 某次业务对象上的实例事实（模板名、job、改写正文…） |
 
-只有代码材料时，只能解释实现，不能声称还原某一次运行。
+只有代码时，只能解释实现。  
+只有代码 + 运行文件时，仍可能**答不全实例题**：日志/导出**不能**自动覆盖库表里的结构化对象。  
+数据面调研与查库策略见 [`CODING_AGENT_PROJECT_DATA_PLANE_RESEARCH.md`](./CODING_AGENT_PROJECT_DATA_PLANE_RESEARCH.md)。
 
 ## 3. 系统组成
 
@@ -29,7 +33,7 @@
 PinAsk 页面
    ↓ 页面事实 + 问题
 薄 Runner
-   ├─ 代码只读 + 运行材料只读
+   ├─ 代码只读 + 运行文件只读 + 项目数据只读（按配置）
    ├─ DSH Adapter（Flash 默认）
    ├─ 证据检查与回答组织
    └─ 外部 Advisor Workspace
@@ -41,9 +45,10 @@ PinAsk 页面
 
 - `[已实现]` PinAsk overlay：`/Users/ltc/CursorProject/中交机电局项目/pinask`；可采集 URL、页面文本、选中元素、祖先结构和时间；截图仍为 `not-captured`；
 - `[已实现]` `readonly-advisor` CLI：可调用 DSH、记录会话、追问、生成研发建议和记录研发决定；
+- `[已实现]` 运行文件面：`export-dir` + SSH 护栏；
+- `[预留]` 项目数据面：fixture 协议；Planora 命名查询未接；
 - `[进行中]` PinAsk → Runner：本仓 Runner 已接 `/api/pinask`；PinAsk overlay 展示 `answer` 在 `kouhkh/pinask` 迭代；
-- `[计划]` 外部查询笔记的自动生成和复用；
-- `[计划]` Planora 运行材料读取器。
+- `[计划]` 外部查询笔记的自动生成和复用。
 
 ## 4. 两条接入轴
 
@@ -57,16 +62,26 @@ PinAsk 页面
 
 `project` 和 `environment` 由顾问配置绑定。PinAsk 不负责把 UI 映射到源码，也不持有 SSH、数据库或模型凭据。
 
-### 轴 B：运行材料访问
+### 轴 B：运行文件访问
 
 | 方式 | 适用情况 | 阶段 |
 |---|---|---|
 | 固定导出目录 | Planora P0 的本地实验 | P0 |
 | 已有只读查询命令 | 项目已有查运行和产物的命令 | P0/P1 |
 | SSH 只读搜索 | 测试环境材料只在内网 | P1 |
-| Runtime Adapter | 第二个项目重复出现同类接入 | 后续 |
+| Runtime Adapter（文件侧） | 第二个项目重复出现同类接入 | 后续 |
 
 轴 B 不是页面接入的第四档。没有 `run_id` 时必须搜索或浏览材料；有多个候选时要列出并追问，不能拼接不同运行。
+
+### 轴 C：项目只读数据访问（与轴 B 正交）
+
+| 方式 | 适用情况 | 阶段 |
+|---|---|---|
+| 命名只读查询 / 只读视图 | 需要元数据、文档、策略、draft、任务行 | P1（实例题常必需） |
+| 只读 BFF / OpenAPI | 不宜对顾问暴露 SQL | P1 |
+| 自由 SQL 给模型 | **不作为产品默认** | 仅人工研究 |
+
+默认由接入方注册查询与参数；模型选查询并读回证据卡，不现场发明任意 SQL。详见数据面深入调研。
 
 ## 5. 外部 Advisor Workspace
 

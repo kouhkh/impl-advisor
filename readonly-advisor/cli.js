@@ -23,7 +23,7 @@ const {
 const { runSshOp, defaultAuditPath } = require('./ssh-readonly');
 
 function usage(exitCode = 0) {
-  const text = `\nReadonly Advisor (DSH)\n\nCommands:\n  init      create a minimal project config outside the target workspace\n  ask       ask a read-only business/task question and record the session\n  followup  continue a recorded session\n  notes     refresh or show external Context Notes\n  versions  capture code vs deploy version binding\n  runtime-search  list guarded runtime candidate files\n  ssh       guarded readonly SSH ops\n  propose   create a developer-reviewable modification proposal\n  review    record a developer decision on a proposal\n\nExamples:\n  node readonly-advisor/cli.js versions --config ~/.impl-advisor/planora/project.json\n  node readonly-advisor/cli.js runtime-search --config ~/.impl-advisor/planora/project.json --question "这次运行日志在哪"\n  node readonly-advisor/cli.js ask --config ~/.impl-advisor/planora/project.json \\\n    --question "这次改写对应哪份运行材料？"\n  # ask：部署快照默认开；运行相关问题会一次 SSH 拉候选。可用 --no-deploy-snapshot / --no-runtime-candidates\n`;
+  const text = `\nReadonly Advisor (DSH)\n\nCommands:\n  init      create a minimal project config outside the target workspace\n  ask       ask a read-only business/task question and record the session\n  followup  continue a recorded session\n  notes     refresh or show external Context Notes\n  versions  capture code vs deploy version binding\n  runtime-search  list guarded runtime candidate files\n  records   list/get structured runtime records (fixture/sql contract)\n  ssh       guarded readonly SSH ops\n  propose   create a developer-reviewable modification proposal\n  review    record a developer decision on a proposal\n\nExamples:\n  node readonly-advisor/cli.js versions --config ~/.impl-advisor/planora/project.json\n  node readonly-advisor/cli.js runtime-search --config ~/.impl-advisor/planora/project.json --question "这次运行日志在哪"\n  node readonly-advisor/cli.js records --config <cfg> --op list --collection jobs --query "demo"\n  node readonly-advisor/cli.js records --config <cfg> --op get --collection jobs --id job-1\n  node readonly-advisor/cli.js ask --config ~/.impl-advisor/planora/project.json \\\n    --question "这次改写对应哪份运行材料？"\n  # ask：部署快照默认开；运行相关问题会一次 SSH 拉候选。可用 --no-deploy-snapshot / --no-runtime-candidates\n`;
   process.stdout.write(text);
   process.exit(exitCode);
 }
@@ -218,6 +218,33 @@ function commandNotes(args) {
   process.stdout.write(`${notes}\n`);
 }
 
+function commandRecords(args) {
+  const config = loadConfig(required(args, 'config'));
+  const { runRecordList, runRecordGet } = require('./evidence-gateway');
+  const op = required(args, 'op');
+  let card;
+  if (op === 'list') {
+    let where = null;
+    if (args.where) {
+      where = typeof args.where === 'string' ? JSON.parse(args.where) : args.where;
+    }
+    card = runRecordList(config, {
+      collection: required(args, 'collection'),
+      query: args.query || null,
+      where,
+      limit: args.limit ? Number(args.limit) : undefined,
+    });
+  } else if (op === 'get') {
+    card = runRecordGet(config, {
+      collection: required(args, 'collection'),
+      id: required(args, 'id'),
+    });
+  } else {
+    throw new Error('records --op must be list or get');
+  }
+  process.stdout.write(`${JSON.stringify(card, null, 2)}\n`);
+}
+
 function commandSsh(args) {
   const config = loadConfig(required(args, 'config'));
   if (!config.runtime || config.runtime.mode !== 'ssh') {
@@ -261,6 +288,7 @@ function main() {
     if (command === 'notes') return commandNotes(args);
     if (command === 'versions') return commandVersions(args);
     if (command === 'runtime-search') return commandRuntimeSearch(args);
+    if (command === 'records') return commandRecords(args);
     if (command === 'ssh') return commandSsh(args);
     if (command === 'propose') return commandPropose(args);
     if (command === 'review') return commandReview(args);

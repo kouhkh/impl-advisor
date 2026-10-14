@@ -1,10 +1,12 @@
 # Coding Agent 顾问：外部上下文生成开发计划
 
-> 状态：修订版，2026-10-12  
+> 状态：修订版，2026-10-12；**2026-10-13 按数据面深入调研修订**  
 > 试点：Planora「技术规格书语气改写」  
-> 原则：项目方不需要向目标代码库添加顾问文件、提示词、索引或工具。
+> 原则：项目方不需要向目标代码库添加顾问文件、提示词、索引或工具；数据面以命名只读查询/视图接入。
 
-模块边界以 [`CODING_AGENT_ADVISOR_SERVICE_ARCHITECTURE.md`](./CODING_AGENT_ADVISOR_SERVICE_ARCHITECTURE.md) 为准。本计划只维护阶段、出口和扩展触发条件。
+模块边界以 [`CODING_AGENT_ADVISOR_SERVICE_ARCHITECTURE.md`](./CODING_AGENT_ADVISOR_SERVICE_ARCHITECTURE.md) 为准。  
+数据面调研：[`CODING_AGENT_PROJECT_DATA_PLANE_RESEARCH.md`](./CODING_AGENT_PROJECT_DATA_PLANE_RESEARCH.md)。  
+本计划只维护阶段、出口和扩展触发条件。
 
 ## 1. 计划边界
 
@@ -22,8 +24,9 @@
 | Page Connector / PinAsk | `[独立仓]` [kouhkh/pinask](https://github.com/kouhkh/pinask)；本仓只钉版本 [`deps/pinask.json`](../deps/pinask.json)，不内嵌源码 |
 | Advisor Runner | `[已实现]` `runner/server.js`：本机 HTTP，接 PinAsk/`/ask`；DSH 仍走 CLI 封装 |
 | Code Access | `[MVP]` 本地目录、Git 或 SSH 只读 |
-| Runtime Access | `[已实现]` `export-dir`；`ssh` 护栏执行器已接 123（白名单/超时/load 拒绝/审计），见 `docs/SSH_READONLY_GUARDRAILS.md` |
-| Generic Tool Executor | `[MVP]` 优先复用 DSH 的目录、读文件、搜索和版本工具 |
+| Runtime File Access | `[已实现]` `export-dir`；`ssh` 护栏执行器已接 123（白名单/超时/load 拒绝/审计），见 `docs/SSH_READONLY_GUARDRAILS.md` |
+| Project Data Access | `[预留]` fixture list/get + `structuredRuntime.mode=sql` 占位；**未**接 Planora 命名查询；见数据面调研 |
+| Generic Tool Executor | `[MVP]` 优先复用 DSH 的目录、读文件、搜索和版本工具；数据面工具尚未进 DSH 循环 |
 | DSH Adapter | `[已实现]` `readonly-advisor` 调用 DSH headless |
 | Context Notes | `[已实现]` `notes --refresh` 写 `map.md`/`task.md`/`runtime-reading.md`；ask 自动注入；已在 `wps-addin-poc` 测通 |
 | Advisor Workspace | `[已实现]` 默认 `~/.impl-advisor/<project>/{project.json,sessions,notes}`；默认不写目标仓库 |
@@ -74,8 +77,8 @@
 | 观察到的失败 | 再考虑的扩展 | 不要误判成 |
 |---|---|---|
 | 搜索轮次多、找错模块 | 结构索引/代码地图增强 | 先要求项目方写导航文件 |
-| 代码机制对、个案对不上 | 加深运行搜索和日志覆盖 | 再加代码索引 |
-| 长期无法定位唯一运行 | 页面适配器或更厚 Runtime | 让 Agent 猜运行 ID |
+| 代码机制对、个案 provenance 对不上 | **优先项目只读数据面**（命名查询）；文件搜索只能补日志类题 | 再加代码索引，或默认开放自由 SQL |
+| 长期无法定位唯一运行（文件面） | 页面适配器或更厚 Runtime File Access | 让 Agent 猜运行 ID |
 | 同一事实反复纠正 | 外部确认事实 | 自动把推导写成真相 |
 | 任务 dossier 越积越长 | 按版本和问题裁剪 | 建立全项目大提示词 |
 | 第二项目接入重复劳动 | Runtime Adapter 或外部模板 | 先建中心化平台 |
@@ -88,9 +91,10 @@
 4. `[已完成]` Planora 真实 export-dir + DSH 冒烟（配置在本机 `~/.impl-advisor/planora/`，不入库）；
 5. `[已完成]` Context Notes 刷新/注入（人工确认事实仍可后续加 `confirmed-facts`）；
 6. `[已完成/PinAsk 仓]` overlay 展示 `answer` + `session` 追问；本仓用 `deps/pinask.json` 记录兼容 commit。
-7. `[进行中/P1]` SSH 护栏、版本绑定、运行候选搜索（`ask-preflight` / `runtime-search`）已落地；多候选强制追问。余下：真实运行问题验收、notes 增量、confirmed-facts。
+7. `[进行中/P1]` SSH 护栏、版本绑定、运行候选搜索（`ask-preflight` / `runtime-search`）已落地；多候选强制追问。余下：真实**文件面**运行问题验收、notes 增量、confirmed-facts。  
+8. `[待做/P1]` 项目只读数据面：Planora 最小命名查询集 + 只读角色/预算 + DSH 工具接入；用 Q123 软分做文件-only vs 文件+数据对照（见数据面调研 §7.4 / §11）。
 
-P0 不做：新前端、注册中心、OpenAPI、向量库、结构索引大框架、自动 Pro 路由。
+P0 不做：新前端、注册中心、OpenAPI、向量库、结构索引大框架、自动 Pro 路由、模型自由 SQL。
 
 ## 6. 实验指标
 

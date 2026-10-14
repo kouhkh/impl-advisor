@@ -22,6 +22,8 @@ assert.deepEqual(GATEWAY_OPS, [
   'run.list',
   'run.summary',
   'run.log_slice',
+  'run.record_list',
+  'run.record_get',
   'version.bind',
 ]);
 

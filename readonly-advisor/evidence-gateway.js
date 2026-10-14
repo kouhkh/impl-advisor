@@ -17,6 +17,8 @@ const GATEWAY_OPS = Object.freeze([
   'run.list',
   'run.summary',
   'run.log_slice',
+  'run.record_list',
+  'run.record_get',
   'version.bind',
 ]);
 
@@ -286,6 +288,42 @@ function collectLocalGitFacts(workspace) {
   };
 }
 
+function runRecordList(config, args = {}) {
+  const { listRecords } = require('./structured-runtime');
+  const structured = config.structuredRuntime || { mode: 'none', enabled: false };
+  const result = listRecords(structured, args);
+  const records = result.records || [];
+  return makeCard({
+    op: 'run.record_list',
+    kind: 'run',
+    status: result.status === 'observed' ? 'observed' : 'derived',
+    title: `run.record_list：${args.collection || '?'} (${result.status})`,
+    summary: result.detail
+      || `${result.returned || 0}/${result.totalMatched || 0} records`
+      || '',
+    pointers: records.map((row) => `${args.collection}/${row.id}`).filter(Boolean).slice(0, 20),
+    payload: result,
+  });
+}
+
+function runRecordGet(config, args = {}) {
+  const { getRecord } = require('./structured-runtime');
+  const structured = config.structuredRuntime || { mode: 'none', enabled: false };
+  const result = getRecord(structured, args);
+  const pointer = args.collection && args.id ? `${args.collection}/${args.id}` : null;
+  return makeCard({
+    op: 'run.record_get',
+    kind: 'run',
+    status: result.status === 'observed' ? 'observed' : 'derived',
+    title: `run.record_get：${pointer || '?'} (${result.status})`,
+    summary: result.detail
+      || (result.record ? `chars=${result.chars || 0}${result.truncated ? ' truncated' : ''}` : 'no record'),
+    pointers: pointer ? [pointer] : [],
+    payload: result,
+    budgetChars: structured.limits && structured.limits.maxGetChars,
+  });
+}
+
 function versionBind(config, {
   includeDeploySnapshot = true,
   collectWorkspaceFactsFn = null,
@@ -379,6 +417,10 @@ function executeOp(op, config, args = {}) {
       return runSummary(args.runtimeSearch || args.card || args);
     case 'run.log_slice':
       return runLogSlice(config, args);
+    case 'run.record_list':
+      return runRecordList(config, args);
+    case 'run.record_get':
+      return runRecordGet(config, args);
     case 'version.bind':
       return versionBind(config, args);
     default:
@@ -396,6 +438,8 @@ module.exports = {
   runList,
   runSummary,
   runLogSlice,
+  runRecordList,
+  runRecordGet,
   versionBind,
   cardsFromAskContext,
   executeOp,
